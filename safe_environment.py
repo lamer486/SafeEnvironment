@@ -53,7 +53,7 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.55"
+VERSION = "0.56"
 WINDOW_TITLE = "SafeEnvironment v" + VERSION
 COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
                   "by the Design HUB team of Kika-Braz Architects, 2026.")
@@ -4628,8 +4628,8 @@ class SafeEnvironment(QtWidgets.QWidget):
         # --- режим интерфейса: Просто / Расширенный ---
         mr = QtWidgets.QHBoxLayout()
         mr.setSpacing(0)
-        self.b_mode_simple = QtWidgets.QPushButton("Просто")
-        self.b_mode_adv = QtWidgets.QPushButton("Расширенный")
+        self.b_mode_simple = QtWidgets.QPushButton("Simple")
+        self.b_mode_adv = QtWidgets.QPushButton("Expert")
         for b_ in (self.b_mode_simple, self.b_mode_adv):
             b_.setCheckable(True)
             b_.setProperty("seg", True)
@@ -4674,13 +4674,6 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_current.setWordWrap(True)
         root.addWidget(self.lbl_current)
 
-        b_ir = QtWidgets.QPushButton("Интерактивный рендер Corona")
-        b_ir.setMinimumHeight(30)
-        b_ir.setToolTip("Запускает интерактивный рендер Corona (Interactive Rendering) в активном виде.")
-        b_ir.clicked.connect(self.start_interactive)
-        mark_primary(b_ir)
-        set_btn_icon(b_ir, "play", "#1e1e1e")
-        root.addWidget(b_ir)
         row_nav = QtWidgets.QHBoxLayout()
         b_prev = QtWidgets.QPushButton("Пред.")
         set_btn_icon(b_prev, "prev")
@@ -4704,6 +4697,13 @@ class SafeEnvironment(QtWidgets.QWidget):
         row.addWidget(b_lib)
         row.addWidget(b_reload)
         root.addLayout(row)
+        b_ir = QtWidgets.QPushButton("Start Interactive Render")
+        b_ir.setMinimumHeight(30)
+        b_ir.setToolTip("Запускает интерактивный рендер Corona (Interactive Rendering) в активном виде.")
+        b_ir.clicked.connect(self.start_interactive)
+        mark_primary(b_ir)
+        set_btn_icon(b_ir, "play", "#1e1e1e")
+        root.addWidget(b_ir)
 
         # --- настройки HDRI ---
         g = self._card("Настройки HDRI", "hdri")
