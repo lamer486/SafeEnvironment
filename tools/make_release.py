@@ -9,7 +9,8 @@
 Что делает (запускать из корня репозитория):
   1. берёт файл скрипта --src, проверяет синтаксис и читает VERSION;
   2. прописывает в нём адрес обновлений вашего репозитория (--repo, запоминается в tools/repo.txt);
-  3. сохраняет как safe_environment.py (имя файла фиксированное — по нему скрипты находят обновление);
+  3. сохраняет как safe_environment.py (последняя версия, из неё собираются установщики) и releases/safe_environment_vX.Y.py
+     (на эту копию ссылается version.json);
   4. считает sha256 и пишет version.json (его читает кнопка «Обновить» в скрипте);
   5. добавляет запись в CHANGELOG.md;
   6. собирает установщики dist/SafeEnvironment.mzp и dist/SafeEnvironment_Uninstall.mzp.
@@ -75,7 +76,14 @@ def main():
     with open(script, "rb") as f:
         sha = hashlib.sha256(f.read()).hexdigest()
 
-    manifest = {"version": version, "file": "safe_environment.py", "sha256": sha,
+    # копия под именем с версией: манифест ссылается на неё, поэтому кэш GitHub (до ~5 минут) не может подсунуть
+    # старый файл к новому манифесту
+    rel_dir = os.path.join(ROOT, "releases")
+    os.makedirs(rel_dir, exist_ok=True)
+    rel_name = "releases/safe_environment_v%s.py" % version
+    write(os.path.join(ROOT, rel_name), text)
+
+    manifest = {"version": version, "file": rel_name, "sha256": sha,
                 "date": datetime.date.today().isoformat(), "notes": a.notes}
     write(os.path.join(ROOT, "version.json"), json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 
@@ -116,7 +124,7 @@ def main():
     print("sha256:      %s" % sha)
     print("Манифест:    %s" % raw)
     print("Установщики: %s, %s" % (p1, p2))
-    print("Загрузите в репозиторий: safe_environment.py, version.json, CHANGELOG.md, dist/*.mzp")
+    print("Загрузите в репозиторий: safe_environment.py, releases/, version.json, CHANGELOG.md, dist/*.mzp")
 
 
 if __name__ == "__main__":

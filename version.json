@@ -1,6 +1,6 @@
 {
   "version": "0.51",
-  "file": "safe_environment.py",
+  "file": "releases/safe_environment_v0.51.py",
   "sha256": "48bca43289670b9632c6975e27f23832f8f289a7ff5b1f37a856357ed12fc8b3",
   "date": "2026-10-13",
   "notes": [
