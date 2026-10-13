@@ -53,7 +53,7 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.50"
+VERSION = "0.51"
 WINDOW_TITLE = "SafeEnvironment v" + VERSION
 COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
                   "by the Design HUB team of Kika-Braz Architects, 2026.")
@@ -4243,6 +4243,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._refresh_update_ui()
         if not newer and not silent:
             self._status("Установлена последняя версия (v%s)." % VERSION)
+            QtWidgets.QMessageBox.information(self, "Обновления", "У вас установлена последняя версия: v%s." % VERSION)
         elif newer and silent:
             self._status("Доступна новая версия v%s — кнопка вверху." % man["version"])
         return man if newer else None
@@ -4266,17 +4267,35 @@ class SafeEnvironment(QtWidgets.QWidget):
                 return
         self._install_update(man)
 
+    def _ask(self, title, text, yes_text, no_text, info="", icon=None, default_yes=True):
+        """Окно с двумя кнопками. True — нажата первая («да»), False — вторая или закрытие окна."""
+        box = QtWidgets.QMessageBox(self)
+        box.setIcon(icon or QtWidgets.QMessageBox.Question)
+        box.setWindowTitle(title)
+        box.setText(text)
+        if info:
+            box.setInformativeText(info)
+        b_yes = box.addButton(yes_text, QtWidgets.QMessageBox.AcceptRole)
+        b_no = box.addButton(no_text, QtWidgets.QMessageBox.RejectRole)
+        box.setDefaultButton(b_yes if default_yes else b_no)
+        box.setEscapeButton(b_no)
+        box.exec()
+        return box.clickedButton() is b_yes
+
     def _install_update(self, man):
         path = script_path()
         if not path:
             self._status("Скрипт запущен не из файла — автообновление недоступно. Скачайте новую версию вручную.", error=True)
             return
         notes = man.get("notes") or "—"
-        r = QtWidgets.QMessageBox.question(
-            self, WINDOW_TITLE, "Доступна версия %s (у вас %s).\n\nЧто нового:\n%s\n\nУстановить сейчас? Предыдущая "
-            "версия сохранится, к ней можно вернуться." % (man["version"], VERSION, notes),
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.Yes)
-        if r != QtWidgets.QMessageBox.Yes:
+        if not self._ask(
+                "Доступно обновление",
+                "Доступна новая версия SafeEnvironment: v%s\nУстановлена версия: v%s" % (man["version"], VERSION),
+                "Обновить", "Отмена",
+                info="Что нового:\n%s\n\nПосле обновления окно скрипта перезапустится. Предыдущая версия сохранится, "
+                     "к ней можно вернуться (меню «▾»)." % notes,
+                icon=QtWidgets.QMessageBox.Information):
+            self._status("Обновление отменено. Кнопка «Обновить до v%s» остаётся вверху." % man["version"])
             return
         self._wait_cursor(True)
         try:
@@ -4328,10 +4347,8 @@ class SafeEnvironment(QtWidgets.QWidget):
         if not path:
             self._status("Скрипт запущен не из файла — откат недоступен.", error=True)
             return
-        r = QtWidgets.QMessageBox.question(
-            self, WINDOW_TITLE, "Вернуть версию %s? Текущая (%s) сохранится в резервных копиях." % (ver, VERSION),
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-        if r != QtWidgets.QMessageBox.Yes:
+        if not self._ask("Вернуть предыдущую версию", "Вернуть версию v%s?" % ver, "Вернуть", "Отмена",
+                         info="Текущая версия (v%s) сохранится в резервных копиях." % VERSION, default_yes=False):
             return
         try:
             with open(bpath, "rb") as fh:
