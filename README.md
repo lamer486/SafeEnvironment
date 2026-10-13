@@ -1,6 +1,6 @@
 # SafeEnvironment
 
-Окружение (HDRI + Corona Sun) для **3ds Max + Corona Renderer** — безопасная замена QuickEnvironment.
+Окружение (HDRI + Corona Sun) для **3ds Max + Corona Renderer**.
 Скрипт ничего не делает «в фоне» и не слушает Max: каждое действие — один undo-блок.
 
 **Что умеет:** библиотека HDRI с группами, тегами и превью · поворот / Exposure / Gamma / Saturation / Blur / Horizon ·
