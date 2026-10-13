@@ -53,7 +53,7 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.57"
+VERSION = "0.58"
 WINDOW_TITLE = "SkyRig Studio v" + VERSION
 COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
                   "by the Design HUB team of Kika-Braz Architects, 2026.")
@@ -1235,6 +1235,17 @@ def active_corona_cam():
     except Exception:
         pass
     return None
+
+
+def active_camera_name():
+    """Имя камеры активного вида (любой камеры, не только CoronaCam); пустая строка, если вид без камеры."""
+    try:
+        c = rt.viewport.getCamera()
+        if c is not None:
+            return str(c.name)
+    except Exception:
+        pass
+    return ""
 
 
 def _target_obj(kind):
@@ -5757,8 +5768,25 @@ class SafeEnvironment(QtWidgets.QWidget):
         return True
 
     def save_preset_as(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Сохранить пресет", "Название пресета:")
-        name = name.strip() if ok else ""
+        cam = active_camera_name()
+        dlg = QtWidgets.QInputDialog(self)
+        dlg.setWindowTitle("Сохранить пресет")
+        dlg.setInputMode(QtWidgets.QInputDialog.TextInput)
+        if cam:
+            dlg.setLabelText("Название пресета (подставлена активная камера — допишите вариант):")
+            dlg.setTextValue(cam + " ")
+        else:
+            dlg.setLabelText("Название пресета:")
+        le = dlg.findChild(QtWidgets.QLineEdit)
+
+        def _cursor_to_end():                          # по умолчанию текст выделен и затрётся первым символом
+            if le is not None:
+                le.deselect()
+                le.setCursorPosition(len(le.text()))
+        QtCore.QTimer.singleShot(0, _cursor_to_end)
+        QtCore.QTimer.singleShot(60, _cursor_to_end)
+        ok = dlg.exec() == QtWidgets.QDialog.Accepted
+        name = dlg.textValue().strip() if ok else ""
         if not name:
             return
         if name in self.presets.presets:
