@@ -1,4 +1,4 @@
-# SafeEnvironment
+# SkyRig Studio
 
 Окружение (HDRI + Corona Sun) для **3ds Max + Corona Renderer**.
 Скрипт ничего не делает «в фоне» и не слушает Max: каждое действие — один undo-блок.
@@ -14,10 +14,10 @@ Corona Sun, привязанный к самой яркой точке карт�
 - Windows. Для обновлений и загрузки карт — доступ в интернет (сам скрипт работает и без него).
 
 ## Установка
-1. Скачайте [`dist/SafeEnvironment.mzp`](https://github.com/lamer486/SafeEnvironment/raw/main/dist/SafeEnvironment.mzp).
+1. Скачайте [`dist/SkyRigStudio.mzp`](https://github.com/lamer486/SkyRigStudio/raw/main/dist/SkyRigStudio.mzp).
 2. Перетащите файл мышью в окно 3ds Max (в любой вьюпорт). Установщик скопирует скрипт и создаст кнопку.
 3. Выведите кнопку на панель: **Customize → Customize User Interface → Toolbars** (или Menus / Quads) →
-   категория **SafeEnvironment** → перетащите «SafeEnvironment» на панель. Запуск — по этой кнопке.
+   категория **SkyRig Studio** → перетащите «SkyRig Studio» на панель. Запуск — по этой кнопке.
 
 Окно встраивается слева в интерфейс Max (его можно перетащить к правому краю или оторвать).
 
@@ -28,14 +28,14 @@ Corona Sun, привязанный к самой яркой точке карт�
 Предыдущая версия сохраняется — меню **«▾» → «Вернуть предыдущую версию»**. Автопроверку можно отключить там же.
 
 ## Удаление
-В Max: **Customize → Customize User Interface → Toolbars**, категория **SafeEnvironment**, кнопка **«Uninstall SafeEnvironment»**
-(перетащите её на панель и нажмите) — или перетащите в окно Max `dist/SafeEnvironment_Uninstall.mzp`. Библиотека, пресеты и кэш лежат отдельно в
+В Max: **Customize → Customize User Interface → Toolbars**, категория **SkyRig Studio**, кнопка **«Uninstall SkyRig Studio»**
+(перетащите её на панель и нажмите) — или перетащите в окно Max `dist/SkyRigStudio_Uninstall.mzp`. Библиотека, пресеты и кэш лежат отдельно в
 `%APPDATA%\SafeEnvironment` — установщик спросит, удалять ли их.
 
 ## Где что хранится
 | Что | Где |
 |---|---|
-| Скрипт | `%LOCALAPPDATA%\Autodesk\3dsMax\<версия> - 64bit\ENU\scripts\SafeEnvironment\` |
+| Скрипт | `%LOCALAPPDATA%\Autodesk\3dsMax\<версия> - 64bit\ENU\scripts\SkyRigStudio\` |
 | Библиотека, пресеты, кэш, резервные копии версий | `%APPDATA%\SafeEnvironment\` |
 | Сцена 3ds Max | скрипт ничего в неё не записывает, кроме самого окружения (Corona Color Correct → CoronaBitmap) и одного Corona Sun |
 
@@ -53,7 +53,7 @@ Corona Sun, привязанный к самой яркой точке карт�
 Нужен Python 3 (подойдёт любой). В корне репозитория:
 
 ```
-python tools/make_release.py --src safe_environment_v0.51.py --notes "Что нового 1" "Что нового 2"
+python tools/make_release.py --src skyrig_studio_v0.51.py --notes "Что нового 1" "Что нового 2"
 ```
 
 Скрипт проверит файл, пропишет адрес обновлений, положит копию в `releases/`, посчитает контрольную сумму, обновит
@@ -66,7 +66,7 @@ python tools/make_release.py --src safe_environment_v0.51.py --notes "Что н�
 
 Первый выпуск (один раз, указываем логин и имя репозитория):
 ```
-python tools/make_release.py --src safe_environment_v0.50.py --repo ВАШ_ЛОГИН/SafeEnvironment --notes "Первая публикация"
+python tools/make_release.py --src skyrig_studio_v0.50.py --repo ВАШ_ЛОГИН/SkyRigStudio --notes "Первая публикация"
 ```
 
 Репозиторий должен быть **публичным** (иначе `raw.githubusercontent.com` не отдаёт файлы без токена).
@@ -74,7 +74,7 @@ python tools/make_release.py --src safe_environment_v0.50.py --repo ВАШ_ЛО�
 `%APPDATA%\SafeEnvironment\update_url.txt` (например, для тестовой ветки или файла на сетевой папке).
 
 ## English (short)
-SafeEnvironment — HDRI + Corona Sun environment tool for 3ds Max 2025+ with Corona. Install: drag
-`dist/SafeEnvironment.mzp` into the 3ds Max window, then add the **SafeEnvironment** macro (category *SafeEnvironment*) to a
+SkyRig Studio — HDRI + Corona Sun environment tool for 3ds Max 2025+ with Corona. Install: drag
+`dist/SkyRigStudio.mzp` into the 3ds Max window, then add the **SkyRig Studio** macro (category *SkyRig Studio*) to a
 toolbar. Updates: button at the top of the panel (checks `version.json` on GitHub, verifies SHA-256, keeps a backup for
-rollback). Uninstall: drag `dist/SafeEnvironment_Uninstall.mzp`. User data lives in `%APPDATA%\SafeEnvironment`.
+rollback). Uninstall: drag `dist/SkyRigStudio_Uninstall.mzp`. User data lives in `%APPDATA%\SafeEnvironment`.

@@ -1,8 +1,8 @@
-name "SafeEnvironment"
-version 1.02
+name "SkyRig Studio"
+version 2.00
 clear temp on MAX exit
-copy "safe_environment.py" to "$userscripts\SafeEnvironment"
-copy "uninstall.ms" to "$userscripts\SafeEnvironment"
-copy "SafeEnvironment-SafeEnvironment.mcr" to "$usermacros"
+copy "skyrig_studio.py" to "$userscripts\SkyRigStudio"
+copy "uninstall.ms" to "$userscripts\SkyRigStudio"
+copy "SkyRigStudio-SkyRigStudio.mcr" to "$usermacros"
 run "install.ms"
 drop "install.ms"

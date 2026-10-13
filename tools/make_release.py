@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Выпуск новой версии SafeEnvironment.
+Выпуск новой версии SkyRig Studio.
 
-  python tools/make_release.py --src safe_environment_v0.51.py --notes "Что нового 1" "Что нового 2"
-  python tools/make_release.py --src safe_environment_v0.51.py --repo ВАШ_ЛОГИН/SafeEnvironment --notes "..."
+  python tools/make_release.py --src skyrig_studio_v0.51.py --notes "Что нового 1" "Что нового 2"
+  python tools/make_release.py --src skyrig_studio_v0.51.py --repo ВАШ_ЛОГИН/SkyRigStudio --notes "..."
 
 Что делает (запускать из корня репозитория):
   1. берёт файл скрипта --src, проверяет синтаксис и читает VERSION;
   2. прописывает в нём адрес обновлений вашего репозитория (--repo, запоминается в tools/repo.txt);
-  3. сохраняет как safe_environment.py (последняя версия, из неё собираются установщики) и releases/safe_environment_vX.Y.py
+  3. сохраняет как skyrig_studio.py (последняя версия, из неё собираются установщики) и releases/skyrig_studio_vX.Y.py
      (на эту копию ссылается version.json);
   4. считает sha256 и пишет version.json (его читает кнопка «Обновить» в скрипте);
   5. добавляет запись в CHANGELOG.md;
-  6. собирает установщики dist/SafeEnvironment.mzp и dist/SafeEnvironment_Uninstall.mzp.
+  6. собирает установщики dist/SkyRigStudio.mzp и dist/SkyRigStudio_Uninstall.mzp.
 Потом загрузите изменённые файлы в репозиторий (commit + push или «Upload files» на сайте GitHub).
 """
 import argparse
@@ -41,7 +41,7 @@ def write(path, text):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", required=True, help="файл новой версии скрипта (safe_environment_vX.Y.py)")
+    ap.add_argument("--src", required=True, help="файл новой версии скрипта (skyrig_studio_vX.Y.py)")
     ap.add_argument("--repo", help="ЛОГИН/ИМЯ репозитория на GitHub (нужно один раз, потом запоминается)")
     ap.add_argument("--notes", nargs="*", default=[], help="что нового (каждый пункт — отдельной строкой)")
     a = ap.parse_args()
@@ -50,7 +50,7 @@ def main():
     if not repo and os.path.isfile(REPO_FILE):
         repo = read(REPO_FILE).strip()
     if not repo or "/" not in repo:
-        sys.exit("Укажите --repo ЛОГИН/ИМЯ (например kanevskiy/SafeEnvironment).")
+        sys.exit("Укажите --repo ЛОГИН/ИМЯ (например kanevskiy/SkyRigStudio).")
     owner, name = repo.split("/", 1)
     write(REPO_FILE, repo + "\n")
 
@@ -71,7 +71,7 @@ def main():
     if n1 != 1 or n2 != 1:
         sys.exit("В скрипте не найдены строки UPDATE_MANIFEST_URL / UPDATE_PROJECT_PAGE.")
 
-    script = os.path.join(ROOT, "safe_environment.py")
+    script = os.path.join(ROOT, "skyrig_studio.py")
     write(script, text)
     with open(script, "rb") as f:
         sha = hashlib.sha256(f.read()).hexdigest()
@@ -80,18 +80,18 @@ def main():
     # старый файл к новому манифесту
     rel_dir = os.path.join(ROOT, "releases")
     os.makedirs(rel_dir, exist_ok=True)
-    rel_name = "releases/safe_environment_v%s.py" % version
+    rel_name = "releases/skyrig_studio_v%s.py" % version
     write(os.path.join(ROOT, rel_name), text)
 
     manifest = {"version": version, "file": rel_name, "sha256": sha,
                 "date": datetime.date.today().isoformat(), "notes": a.notes}
     write(os.path.join(ROOT, "version.json"), json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 
-    rd = os.path.join(ROOT, "README.md")                     # заготовка OWNER/SafeEnvironment -> ваш репозиторий
+    rd = os.path.join(ROOT, "README.md")                     # заготовка OWNER/SkyRigStudio -> ваш репозиторий
     if os.path.isfile(rd):
         t = read(rd)
-        if "OWNER/SafeEnvironment" in t:
-            write(rd, t.replace("OWNER/SafeEnvironment", repo))
+        if "OWNER/SkyRigStudio" in t:
+            write(rd, t.replace("OWNER/SkyRigStudio", repo))
 
     chg = os.path.join(ROOT, "CHANGELOG.md")
     old = read(chg) if os.path.isfile(chg) else "# История версий\n"
@@ -111,13 +111,13 @@ def main():
                 z.write(src, arc)
         return p
 
-    p1 = build("SafeEnvironment.mzp", [
+    p1 = build("SkyRigStudio.mzp", [
         ("mzp.run", os.path.join(inst, "mzp.run")),
         ("install.ms", os.path.join(inst, "install.ms")),
         ("uninstall.ms", os.path.join(inst, "uninstall.ms")),
-        ("SafeEnvironment-SafeEnvironment.mcr", os.path.join(inst, "SafeEnvironment-SafeEnvironment.mcr")),
-        ("safe_environment.py", script)])
-    p2 = build("SafeEnvironment_Uninstall.mzp", [
+        ("SkyRigStudio-SkyRigStudio.mcr", os.path.join(inst, "SkyRigStudio-SkyRigStudio.mcr")),
+        ("skyrig_studio.py", script)])
+    p2 = build("SkyRigStudio_Uninstall.mzp", [
         ("mzp.run", os.path.join(inst, "uninstall.mzp.run")),
         ("uninstall.ms", os.path.join(inst, "uninstall.ms"))])
 
@@ -125,7 +125,7 @@ def main():
     print("sha256:      %s" % sha)
     print("Манифест:    %s" % raw)
     print("Установщики: %s, %s" % (p1, p2))
-    print("Загрузите в репозиторий: safe_environment.py, releases/, version.json, CHANGELOG.md, dist/*.mzp")
+    print("Загрузите в репозиторий: skyrig_studio.py, releases/, version.json, CHANGELOG.md, dist/*.mzp")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-name "SafeEnvironment uninstall"
-version 1.02
+name "SkyRig Studio uninstall"
+version 2.00
 clear temp on MAX exit
 run "uninstall.ms"
 drop "uninstall.ms"

@@ -2,7 +2,7 @@
 # Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use
 # by the Design HUB team of Kika-Braz Architects, 2026.
 """
-SafeEnvironment v0.2 — окружение (HDRI + солнце) для 3ds Max 2027 + Corona.
+SkyRig Studio v0.2 — окружение (HDRI + солнце) для 3ds Max 2027 + Corona.
 
 Что умеет
   * превью текущего HDRI; клик по превью открывает библиотеку на локальном диске:
@@ -53,8 +53,8 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.56"
-WINDOW_TITLE = "SafeEnvironment v" + VERSION
+VERSION = "0.57"
+WINDOW_TITLE = "SkyRig Studio v" + VERSION
 COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
                   "by the Design HUB team of Kika-Braz Architects, 2026.")
 WINDOW_OBJ_NAME = "SafeEnvironmentWindow"
@@ -412,7 +412,7 @@ class Library:
         except Exception as ex:
             raise ValueError("не удалось прочитать файл: %s" % ex)
         if not isinstance(d, dict) or not isinstance(d.get("groups"), list):
-            raise ValueError("это не резервный файл библиотеки SafeEnvironment")
+            raise ValueError("это не резервный файл библиотеки SkyRig Studio")
         groups = []
         for g in d["groups"]:
             if isinstance(g, dict) and isinstance(g.get("name"), str):
@@ -554,7 +554,7 @@ class PresetStore:
         except Exception as ex:
             raise ValueError("не удалось прочитать файл: %s" % ex)
         if not isinstance(d, dict) or d.get("format") != PRESETS_FORMAT or not isinstance(d.get("presets"), dict):
-            raise ValueError("это не файл пресетов SafeEnvironment")
+            raise ValueError("это не файл пресетов SkyRig Studio")
         return {n: v for n, v in d["presets"].items() if isinstance(n, str) and isinstance(v, dict)}
 
     def import_presets(self, presets, on_conflict="rename"):
@@ -1839,12 +1839,12 @@ class LightDialog(QtWidgets.QDialog):
 # ==========================================================================
 # Обновление скрипта через GitHub (манифест version.json + файл скрипта)
 # ==========================================================================
-UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lamer486/SafeEnvironment/main/version.json"
+UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lamer486/SkyRigStudio/main/version.json"
 UPDATE_CFG_FILE = os.path.join(DATA_DIR, "update_url.txt")        # необязательно: свой адрес манифеста (первая строка)
 UPDATE_BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 UPDATE_BACKUPS_KEEP = 5
 UPDATE_CHECK_SECONDS = 24 * 3600
-UPDATE_PROJECT_PAGE = "https://github.com/lamer486/SafeEnvironment"
+UPDATE_PROJECT_PAGE = "https://github.com/lamer486/SkyRigStudio"
 _UPDATED_FROM = globals().get("_UPDATED_FROM")                    # задаётся при перезапуске после обновления
 
 
@@ -1870,7 +1870,9 @@ def script_path():
     if p and str(p).lower().endswith(".py") and os.path.isfile(p):
         return os.path.abspath(p)
     try:
-        cand = os.path.join(str(rt.getDir(rt.Name("userScripts"))), "SafeEnvironment", "safe_environment.py")
+        cand = os.path.join(str(rt.getDir(rt.Name("userScripts"))), "SkyRigStudio", "skyrig_studio.py")
+        if not os.path.isfile(cand):                                  # установка старой версией (SafeEnvironment)
+            cand = os.path.join(str(rt.getDir(rt.Name("userScripts"))), "SafeEnvironment", "safe_environment.py")
         if os.path.isfile(cand):
             return cand
     except Exception:
@@ -1888,7 +1890,7 @@ def update_fetch_manifest(timeout=6):
     ver = str(d["version"]).strip()
     if not re.fullmatch(r"\d+(\.\d+){1,3}", ver):
         raise ValueError("неверный номер версии в манифесте: %r" % ver)
-    url = urllib.parse.urljoin(murl, str(d.get("file") or "safe_environment.py"))
+    url = urllib.parse.urljoin(murl, str(d.get("file") or "skyrig_studio.py"))
     if urllib.parse.urlparse(url).scheme != urllib.parse.urlparse(murl).scheme:
         raise ValueError("файл обновления должен лежать по тому же протоколу, что и манифест")
     sha = str(d.get("sha256", "")).strip().lower()
@@ -1976,7 +1978,7 @@ def reload_script(path, old_version):
 # ==========================================================================
 ACG_SITE = "ambientCG"
 ACG_API = "https://ambientcg.com/api/v3/assets"
-ACG_UA = "SafeEnvironment/%s (3ds Max script)" % VERSION
+ACG_UA = "SkyRigStudio/%s (3ds Max script)" % VERSION
 ACG_RES_ORDER = ["1K", "2K", "4K", "8K", "12K", "16K"]
 ACG_THUMB_DIR = os.path.join(DATA_DIR, "acg_thumbs")
 ACG_THUMB_KEY = "256-JPG-242424"
@@ -2421,7 +2423,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
                     try:
                         self._save_cat(items)
                     except Exception:
-                        print("[SafeEnvironment] catalog save error:\n" + traceback.format_exc())
+                        print("[SkyRig Studio] catalog save error:\n" + traceback.format_exc())
                     ts = time.time()
                     note = "Каталог обновлён. "
             except Exception as ex:
@@ -2723,7 +2725,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
                         if path is False:
                             break
                     except Exception:
-                        print("[SafeEnvironment] %s download error for %s:\n%s" % (self.SITE, a["id"], traceback.format_exc()))
+                        print("[SkyRig Studio] %s download error for %s:\n%s" % (self.SITE, a["id"], traceback.format_exc()))
                         path = None
                 if not path:
                     failed.append(a["title"])
@@ -2741,7 +2743,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         try:
             self.lib.save()
         except Exception:
-            print("[SafeEnvironment] library save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
         msg = "Скачано и добавлено в группу «%s»: %d" % (self.SITE, len(done_files))
         if skipped:
             msg += " (уже были на диске: %d)" % len(skipped)
@@ -2770,11 +2772,11 @@ class AmbientCGDialog(QtWidgets.QDialog):
             if cls:
                 lib.set_auto_light(path, cls)
         except Exception:
-            print("[SafeEnvironment] light detect error for %s:\n%s" % (path, traceback.format_exc()))
+            print("[SkyRig Studio] light detect error for %s:\n%s" % (path, traceback.format_exc()))
         try:
             make_thumb(path, lib.thumb_ev)
         except Exception:
-            print("[SafeEnvironment] thumb error for %s:\n%s" % (path, traceback.format_exc()))
+            print("[SkyRig Studio] thumb error for %s:\n%s" % (path, traceback.format_exc()))
 
 
 # ==========================================================================
@@ -3068,7 +3070,7 @@ class PolyHavenDialog(AmbientCGDialog):
             self.progress.setFormat("%s %s: проверка файла..." % (a["title"], res))
             QtWidgets.QApplication.processEvents()
             if not ph_magic_ok(tmp, ext) or (md5 and ph_md5(tmp) != md5):
-                print("[SafeEnvironment] Poly Haven: файл %s повреждён (не сошлась контрольная сумма)" % a["id"])
+                print("[SkyRig Studio] Poly Haven: файл %s повреждён (не сошлась контрольная сумма)" % a["id"])
                 return None
             os.replace(tmp, dst)
             return dst
@@ -3280,7 +3282,7 @@ class LibraryDialog(QtWidgets.QDialog):
         try:
             self.lib.save()
         except Exception:
-            print("[SafeEnvironment] library save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
             self._info("Не удалось сохранить библиотеку (см. Listener).", error=True)
 
     # ---------- группы ----------
@@ -3462,9 +3464,9 @@ class LibraryDialog(QtWidgets.QDialog):
         if not self.lib.groups:
             self._info("Библиотека пуста — сохранять нечего.", error=True)
             return
-        default = os.path.join(os.path.expanduser("~"), "SafeEnvironment_library.json")
+        default = os.path.join(os.path.expanduser("~"), "SkyRigStudio_library.json")
         path, _f = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Сохранить библиотеку HDRI", default, "Библиотека SafeEnvironment (*.json)")
+            self, "Сохранить библиотеку HDRI", default, "Библиотека SkyRig Studio (*.json)")
         if not path:
             return
         if not path.lower().endswith(".json"):
@@ -3472,7 +3474,7 @@ class LibraryDialog(QtWidgets.QDialog):
         try:
             self.lib.export_to(path)
         except Exception:
-            print("[SafeEnvironment] library export error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] library export error:\n" + traceback.format_exc())
             self._info("Не удалось сохранить файл (см. Listener).", error=True)
             return
         total = len(self.lib.files_of(ALL_GROUP))
@@ -3480,7 +3482,7 @@ class LibraryDialog(QtWidgets.QDialog):
 
     def _import_library(self):
         path, _f = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Загрузить библиотеку HDRI", os.path.expanduser("~"), "Библиотека SafeEnvironment (*.json)")
+            self, "Загрузить библиотеку HDRI", os.path.expanduser("~"), "Библиотека SkyRig Studio (*.json)")
         if not path:
             return
         try:
@@ -3610,7 +3612,7 @@ class LibraryDialog(QtWidgets.QDialog):
                     if make_thumb(p, self.lib.thumb_ev):
                         done += 1
                 except Exception:
-                    print("[SafeEnvironment] thumb error for %s:\n%s" % (p, traceback.format_exc()))
+                    print("[SkyRig Studio] thumb error for %s:\n%s" % (p, traceback.format_exc()))
             self.progress.setValue(100 if not self._cancel else self.progress.value())
             self.progress.setFormat("Готово: %d из %d" % (done, len(todo)) if not self._cancel
                                     else "Отменено: %d из %d" % (done, len(todo)))
@@ -3696,7 +3698,7 @@ class LibraryDialog(QtWidgets.QDialog):
                         failed += 1
                 except Exception:
                     failed += 1
-                    print("[SafeEnvironment] brightness error for %s:\n%s" % (p, traceback.format_exc()))
+                    print("[SkyRig Studio] brightness error for %s:\n%s" % (p, traceback.format_exc()))
             cancelled = self._cancel
             self.progress.setValue(100 if not cancelled else self.progress.value())
             self.progress.setFormat("Готово: %d из %d" % (ok, len(files)) if not cancelled
@@ -3726,7 +3728,7 @@ class LibraryDialog(QtWidgets.QDialog):
         try:
             self.owner.apply_norm_to_current()
         except Exception:
-            print("[SafeEnvironment] apply norm error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] apply norm error:\n" + traceback.format_exc())
 
     def _reset_norm(self):
         if self._busy:
@@ -3737,7 +3739,7 @@ class LibraryDialog(QtWidgets.QDialog):
         try:
             self.owner.reset_norm_current()
         except Exception:
-            print("[SafeEnvironment] reset norm error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] reset norm error:\n" + traceback.format_exc())
         self._info("Выравнивание выключено, Exposure возвращён к 0.")
 
     def _set_reference(self):
@@ -3802,7 +3804,7 @@ class LibraryDialog(QtWidgets.QDialog):
                 try:
                     cls, _how = detect_light(p, use_name)
                 except Exception:
-                    print("[SafeEnvironment] light detect error for %s:\n%s" % (p, traceback.format_exc()))
+                    print("[SkyRig Studio] light detect error for %s:\n%s" % (p, traceback.format_exc()))
                     cls = None
                 if cls is None:
                     failed += 1
@@ -3865,7 +3867,7 @@ class LibraryDialog(QtWidgets.QDialog):
                 try:
                     render_thumb(p, ev)
                 except Exception:
-                    print("[SafeEnvironment] re-render error for %s:\n%s" % (p, traceback.format_exc()))
+                    print("[SkyRig Studio] re-render error for %s:\n%s" % (p, traceback.format_exc()))
             self.progress.setValue(100)
             self.progress.setFormat("Готово: %d" % len(files))
         finally:
@@ -4143,7 +4145,7 @@ class SunCompass(QtWidgets.QWidget):
                 self._img = self._render(S)
             except Exception:
                 self._img = None
-                print("[SafeEnvironment] compass render error:\n" + traceback.format_exc())
+                print("[SkyRig Studio] compass render error:\n" + traceback.format_exc())
             self._img_key = key
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing, True)
@@ -4374,7 +4376,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                     txt += ", солнце %s" % ("спереди" if d < 60 else ("сзади" if d > 120 else "сбоку"))
             self.lbl_compass.setText(txt)
         except Exception:
-            print("[SafeEnvironment] compass update error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] compass update error:\n" + traceback.format_exc())
 
     def _refresh_state(self):
         """Строка состояния: пресет (совпадает / изменён / не сохранён) и предупреждение о привязке."""
@@ -4411,7 +4413,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 self.lbl_link.setStyleSheet("color: #ff4040; font-weight: bold;")
                 self.lbl_link.setText("Привязка солнца к самой яркой точке HDRI не сделана.")
         except Exception:
-            print("[SafeEnvironment] state error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] state error:\n" + traceback.format_exc())
 
     def _status(self, text, error=False):
         self.lbl_status.setStyleSheet("color: #ff7070;" if error else "")
@@ -4429,7 +4431,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 pass
             return result
         except Exception:
-            print("[SafeEnvironment] %s:\n%s" % (title, traceback.format_exc()))
+            print("[SkyRig Studio] %s:\n%s" % (title, traceback.format_exc()))
             self._status("Ошибка: %s (подробности в Listener)" % title, error=True)
             return None
 
@@ -4447,7 +4449,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             self.lib.save()
         except Exception:
-            print("[SafeEnvironment] library save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
 
     def auto_check_updates(self):
         """При запуске: раз в сутки тихая проверка (короткий таймаут); иначе показать уже известную новую версию."""
@@ -4457,6 +4459,20 @@ class SafeEnvironment(QtWidgets.QWidget):
         if time.time() - self.lib.update_checked < UPDATE_CHECK_SECONDS:
             return
         self.check_updates(silent=True)
+
+    def _update_error_box(self, title, err):
+        """Сообщение об ошибке обновления (строка состояния внизу окна легко остаётся незамеченной)."""
+        try:
+            code = getattr(err, "code", None)
+            if code == 404:
+                why = "Страница обновлений не найдена (ошибка 404). Попробуйте позже или сообщите автору скрипта."
+            elif code:
+                why = "Сервер ответил ошибкой %s." % code
+            else:
+                why = "Нет связи с сервером обновлений. Проверьте подключение к интернету."
+            QtWidgets.QMessageBox.warning(self, "Обновления", "%s.\n\n%s\n\nПодробности: %s" % (title, why, err))
+        except Exception:
+            print("[SkyRig Studio] update error box failed:\n" + traceback.format_exc())
 
     def check_updates(self, silent=False):
         """Спрашивает манифест на сайте. Возвращает манифест (если есть новая версия) или None."""
@@ -4474,6 +4490,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._save_lib()
             if not silent:
                 self._status("Не удалось проверить обновления: %s" % err, error=True)
+                self._update_error_box("Не удалось проверить обновления", err)
             return None
         newer = ver_tuple(man["version"]) > ver_tuple(VERSION)
         self.lib.update_latest = man["version"] if newer else ""
@@ -4499,6 +4516,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                     man = None
             except Exception as ex:
                 self._status("Не удалось получить обновление: %s" % ex, error=True)
+                self._update_error_box("Не удалось получить обновление", ex)
                 return
         if man is None:
             man = self.check_updates(silent=False)
@@ -4529,7 +4547,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         notes = man.get("notes") or "—"
         if not self._ask(
                 "Доступно обновление",
-                "Доступна новая версия SafeEnvironment: v%s\nУстановлена версия: v%s" % (man["version"], VERSION),
+                "Доступна новая версия SkyRig Studio: v%s\nУстановлена версия: v%s" % (man["version"], VERSION),
                 "Обновить", "Отмена",
                 info="Что нового:\n%s\n\nПосле обновления окно скрипта перезапустится. Предыдущая версия сохранится, "
                      "к ней можно вернуться (меню «▾»)." % notes,
@@ -4547,7 +4565,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             return
         except Exception as ex:
             self._wait_cursor(False)
-            print("[SafeEnvironment] update error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] update error:\n" + traceback.format_exc())
             self._status("Обновление не установлено: %s" % ex, error=True)
             return
         self._wait_cursor(False)
@@ -4596,7 +4614,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             update_backup(path)
             update_write(path, data)
         except Exception as ex:
-            print("[SafeEnvironment] rollback error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] rollback error:\n" + traceback.format_exc())
             self._status("Откат не выполнен: %s" % ex, error=True)
             return
         self.lib.update_latest, self.lib.update_notes = "", ""
@@ -4619,7 +4637,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.setSpacing(4)
 
         # --- название скрипта и версия ---
-        self.lbl_title = QtWidgets.QLabel("SafeEnvironment  v" + VERSION)
+        self.lbl_title = QtWidgets.QLabel("SkyRig Studio  v" + VERSION)
         self.lbl_title.setAlignment(QtCore.Qt.AlignCenter)
         self.lbl_title.setStyleSheet("font-weight: bold; font-size: 11pt; color: #f0f0f0; "
                                      "padding: 4px; border-bottom: 2px solid %s;" % UI_ACCENT)
@@ -4979,7 +4997,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             for w in self._adv_widgets:
                 w.setVisible(not simple)
         except Exception:
-            print("[SafeEnvironment] apply_mode error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] apply_mode error:\n" + traceback.format_exc())
 
     @undoable("Смена HDRI")
     def step_hdri(self, direction):
@@ -5173,7 +5191,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                     s.on = sun["on"]
             rt.redrawViews()
         except Exception:
-            print("[SafeEnvironment] restore state:\n" + traceback.format_exc())
+            print("[SkyRig Studio] restore state:\n" + traceback.format_exc())
             ok = False
         return ok
 
@@ -5204,7 +5222,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 if png:
                     pm = QtGui.QPixmap(png)
         except Exception:
-            print("[SafeEnvironment] preview error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] preview error:\n" + traceback.format_exc())
         if pm is not None and not pm.isNull():
             self._preview_base = pm.scaled(PREVIEW_W, PREVIEW_H, QtCore.Qt.KeepAspectRatio,
                                            QtCore.Qt.SmoothTransformation)
@@ -5390,7 +5408,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             self.lib.save()
         except Exception:
-            print("[SafeEnvironment] library save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
         self._on_hdri_setting()                 # перенести текущие значения в выбранное место
 
     def _on_rot_spin(self, *_):
@@ -5568,7 +5586,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             pt = self._hdri_sun_point(path)
         except Exception:
-            print("[SafeEnvironment] compass click error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] compass click error:\n" + traceback.format_exc())
             pt = None
         if pt is None:
             self._status("Не удалось найти яркую точку HDRI.", error=True)
@@ -5659,7 +5677,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             pt = self._hdri_sun_point(path, force=force_search)
         except Exception:
-            print("[SafeEnvironment] find brightest error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] find brightest error:\n" + traceback.format_exc())
             self._status("Не удалось найти яркую точку (см. Listener).", error=True)
             return
         if pt is None:
@@ -5733,7 +5751,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             self.presets.save()
         except Exception:
-            print("[SafeEnvironment] preset save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] preset save error:\n" + traceback.format_exc())
             self._status("Не удалось сохранить пресеты (см. Listener).", error=True)
             return False
         return True
@@ -5781,9 +5799,9 @@ class SafeEnvironment(QtWidgets.QWidget):
                 names = [cur]
             elif c is not b_all:
                 return
-        default = os.path.join(os.path.expanduser("~"), "SafeEnvironment_presets.json")
+        default = os.path.join(os.path.expanduser("~"), "SkyRigStudio_presets.json")
         path, _f = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Сохранить пресеты", default, "Пресеты SafeEnvironment (*.json)")
+            self, "Сохранить пресеты", default, "Пресеты SkyRig Studio (*.json)")
         if not path:
             return
         if not path.lower().endswith(".json"):
@@ -5791,7 +5809,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             n = self.presets.export_to(path, names)
         except Exception:
-            print("[SafeEnvironment] presets export error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] presets export error:\n" + traceback.format_exc())
             self._status("Не удалось сохранить файл (см. Listener).", error=True)
             return
         self._status("Пресетов сохранено: %d. %s" % (n, path))
@@ -5861,14 +5879,14 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             n = self.presets.export_to(path)
         except Exception:
-            print("[SafeEnvironment] presets beside scene error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] presets beside scene error:\n" + traceback.format_exc())
             self._status("Не удалось записать файл в папку сцены (нет прав или сеть недоступна).", error=True)
             return
         self._status("Пресетов сохранено: %d. Файл: %s" % (n, path))
 
     def import_presets(self):
         path, _f = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Загрузить пресеты", os.path.expanduser("~"), "Пресеты SafeEnvironment (*.json)")
+            self, "Загрузить пресеты", os.path.expanduser("~"), "Пресеты SkyRig Studio (*.json)")
         if not path:
             return
         try:
@@ -5904,7 +5922,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             self.presets.save()
         except Exception:
-            print("[SafeEnvironment] preset save error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] preset save error:\n" + traceback.format_exc())
             self._status("Не удалось сохранить пресеты (см. Listener).", error=True)
             return
         self._refresh_presets(select=self.cmb_presets.currentText() or None)
@@ -6088,7 +6106,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 self.sp_icon.setValue(units_to_m(float(ic.size)) if ic is not None else ICON_SIZE_DEFAULT)
                 self.chk_on.setChecked(bool(s.on))
         except Exception:
-            print("[SafeEnvironment] sync error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] sync error:\n" + traceback.format_exc())
         finally:
             self._loading = False
         key = (path, self.lib.thumb_ev)
@@ -6164,7 +6182,7 @@ def show():
         try:
             win.auto_check_updates()
         except Exception:
-            print("[SafeEnvironment] update check error:\n" + traceback.format_exc())
+            print("[SkyRig Studio] update check error:\n" + traceback.format_exc())
     try:
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
@@ -6185,7 +6203,7 @@ def show():
             pass   # слева — на всю высоту; справа окно встаёт под Command Panel
         dock.show()
     except Exception:
-        print("[SafeEnvironment] dock failed, floating window:\n" + traceback.format_exc())
+        print("[SkyRig Studio] dock failed, floating window:\n" + traceback.format_exc())
         win.setParent(main_win)
         win.setWindowFlags(QtCore.Qt.Tool)
         win.show()
