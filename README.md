@@ -1,27 +1,41 @@
 # SkyRig Studio
 
-Окружение (HDRI + Corona Sun) для **3ds Max + Corona Renderer**: библиотека HDRI, управление картой и солнцем, пресеты
-и загрузка карт из интернета в одной панели. Скрипт ничего не делает «в фоне» (без callbacks, таймеров и потоков) и не
-слушает Max: каждое действие — один undo-блок.
+**Находит солнце на любой HDRI-карте и привязывает к нему Corona Sun — одним нажатием.**
+
+Больше не нужно вручную подбирать высоту и азимут, пока тень «не совпадёт» с картой: SkyRig Studio измеряет яркость
+HDRI, находит самую яркую точку (солнце на карте) и ставит Corona Sun ровно в то же направление — с учётом поворота карты.
+Для 3ds Max + Corona Renderer.
 
 <p align="center">
-  <img src="docs/images/main-expert-1.png" width="260" alt="Главное окно, режим Expert, верх">
-  <img src="docs/images/main-expert-2.png" width="260" alt="Главное окно: солнце, пресеты, компас">
-  <img src="docs/images/main-simple.png" width="260" alt="Режим Simple">
+  <img src="docs/images/main-expert-2.png" width="300" alt="Кнопка «link to HDRI», привязка азимута и компас солнца">
 </p>
 
-## Что умеет
+## Как это работает
+1. **Выберите HDRI** — из своей библиотеки или скачайте бесплатную карту прямо в окне (ambientCG, Poly Haven).
+2. **Нажмите «link to HDRI»** — скрипт находит самую яркую точку карты (`.hdr` и `.exr`, в том числе большие, 16K; ход поиска виден
+   на индикаторе) и выставляет Height и Azimuth солнца так, чтобы оно совпало с солнцем на карте.
+3. **Вращайте карту как угодно** — при включённой **«Привязке азимута к HDRI»** азимут солнца пересчитывается сам, и свет с
+   карты и Corona Sun всегда направлены в одну сторону.
+4. **Проверьте на компасе** — шар с текстурой HDRI показывает, где солнце на карте, где Corona Sun и откуда смотрит камера.
+
+Без привязки солнце остаётся там, где вы его поставили; в любой момент можно нажать «link to HDRI» ещё раз.
+
+## Что ещё умеет
 - **Библиотека HDRI** — группы, теги, поиск, превью, подпись с разрешением (например, `[8k]`), автоопределение типа освещения.
 - **Управление картой** — поворот, Exposure, Gamma, Saturation, Blur, Horizon, отдельные EV для Direct / Reflect / Refract,
-  переключение карт «Пред. / След.».
-- **Corona Sun, привязанное к карте** — находит самую яркую точку HDRI и ставит солнце в то же направление с учётом
-  поворота; привязка азимута; компас солнца с превью карты.
+  переключение карт «Пред. / След.» (при включённой привязке солнце переставляется на яркую точку новой карты).
 - **Выравнивание яркости** — приводит карты к единому уровню освещённости по эталонной, чтобы при смене HDRI свет не «прыгал».
 - **Пресеты** — освещение целиком (карта, параметры, солнце); при сохранении подставляется имя активной камеры.
 - **Загрузка карт из интернета** — ambientCG и Poly Haven (лицензия CC0), выбор разрешения, проверка целостности файлов.
 - **Своя история изменений** — «Отменить / Вернуть» для всех действий скрипта.
 - **Режимы Simple / Expert** — только основное или все параметры.
+- **Надёжность** — скрипт ничего не делает «в фоне» (без callbacks, таймеров и потоков), каждое действие — один undo-блок.
 - **Обновление одной кнопкой** — с подтверждением и откатом к предыдущей версии.
+
+<p align="center">
+  <img src="docs/images/main-expert-1.png" width="260" alt="Главное окно, режим Expert">
+  <img src="docs/images/main-simple.png" width="260" alt="Режим Simple">
+</p>
 
 ## Скриншоты
 **Библиотека HDRI**
@@ -100,7 +114,10 @@ python tools/make_release.py --src skyrig_studio_v0.50.py --repo ВАШ_ЛОГИ
 `%APPDATA%\SafeEnvironment\update_url.txt` (например, для тестовой ветки или файла на сетевой папке).
 
 ## English (short)
-SkyRig Studio — HDRI + Corona Sun environment tool for 3ds Max 2025+ with Corona. Install: drag
+SkyRig Studio finds the sun on any HDRI map and links Corona Sun to it with one click: it measures the HDRI, locates the
+brightest point and aims Corona Sun in the same direction, accounting for the map rotation. With azimuth link enabled the
+sun follows the map when you rotate it. Also: HDRI library, brightness leveling, presets, ambientCG / Poly Haven (CC0)
+downloaders, own undo/redo, Simple / Expert modes. For 3ds Max 2025+ with Corona. Install: drag
 `dist/SkyRigStudio.mzp` into the 3ds Max window, then add the **SkyRig Studio** macro (category *SkyRig Studio*) to a
 toolbar. Updates: button at the top of the panel (checks `version.json` on GitHub, verifies SHA-256, keeps a backup for
 rollback). Uninstall: drag `dist/SkyRigStudio_Uninstall.mzp`. User data lives in `%APPDATA%\SafeEnvironment`.
