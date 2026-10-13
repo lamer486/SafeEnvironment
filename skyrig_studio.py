@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-# Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use
-# by the Design HUB team of Kika-Braz Architects, 2026.
+# SkyRig Studio. Script created with the help of Claude AI by Vasiliy Kanevskiy, 2026.
 """
 SkyRig Studio v0.2 — окружение (HDRI + солнце) для 3ds Max 2027 + Corona.
 
@@ -53,10 +52,9 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.58"
+VERSION = "0.60"
 WINDOW_TITLE = "SkyRig Studio v" + VERSION
-COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
-                  "by the Design HUB team of Kika-Braz Architects, 2026.")
+COPYRIGHT_TEXT = "Script created with the help of Claude AI by Vasiliy Kanevskiy, 2026."
 WINDOW_OBJ_NAME = "SafeEnvironmentWindow"
 DOCK_OBJ_NAME = "SafeEnvironmentDock"
 LIBRARY_OBJ_NAME = "SafeEnvironmentLibrary"
@@ -82,6 +80,7 @@ THUMB_DIR = os.path.join(DATA_DIR, "thumbs")
 LIB_FILE = os.path.join(DATA_DIR, "library.json")
 PRESET_FILE = os.path.join(DATA_DIR, "presets.json")
 CACHE_FILE = os.path.join(DATA_DIR, "cache.json")
+ACTION_LOG = os.path.join(DATA_DIR, "last_actions.log")
 
 
 # ==========================================================================
@@ -159,6 +158,26 @@ def gain_percent_to_ev(gain):
 # ==========================================================================
 # 2. Хранилища (JSON вне сцены)
 # ==========================================================================
+_ALOG_MAX = 256 * 1024
+
+
+def alog(msg):
+    """Журнал действий (%APPDATA%\\SafeEnvironment\\last_actions.log): строка пишется и закрывается сразу, поэтому после
+    сбоя Max в журнале остаётся последнее действие. Никогда не выбрасывает исключений и ничего не слушает."""
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        try:
+            if os.path.getsize(ACTION_LOG) > _ALOG_MAX:               # ограничение размера: старый журнал -> .1
+                os.replace(ACTION_LOG, ACTION_LOG + ".1")
+        except OSError:
+            pass
+        line = "%s  %s\n" % (time.strftime("%H:%M:%S") + ".%03d" % (int(time.time() * 1000) % 1000), str(msg)[:400])
+        with open(ACTION_LOG, "a", encoding="utf-8") as fh:
+            fh.write(line)
+    except Exception:
+        pass
+
+
 def load_json(path, default):
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -3917,6 +3936,7 @@ def undoable(label):
         def wrapper(self, *a, **k):
             if getattr(self, "_loading", False):             # идёт чтение из сцены: это не действие пользователя
                 return fn(self, *a, **k)
+            alog("ACTION %s" % label)
             self._hist_begin()
             try:
                 return fn(self, *a, **k)
@@ -4433,6 +4453,8 @@ class SafeEnvironment(QtWidgets.QWidget):
 
     def _run(self, title, fn):
         """Действие в undo-блоке; любая ошибка — сообщение в окне, а не падение Max."""
+        t0 = time.time()
+        alog("RUN  %s" % title)
         try:
             with pymxs.undo(True):
                 result = fn()
@@ -4440,8 +4462,10 @@ class SafeEnvironment(QtWidgets.QWidget):
                 rt.redrawViews()
             except Exception:
                 pass
+            alog("DONE %s (%d мс)" % (title, (time.time() - t0) * 1000))
             return result
         except Exception:
+            alog("FAIL %s: %s" % (title, traceback.format_exc().strip().splitlines()[-1]))
             print("[SkyRig Studio] %s:\n%s" % (title, traceback.format_exc()))
             self._status("Ошибка: %s (подробности в Listener)" % title, error=True)
             return None
@@ -4596,6 +4620,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         act_notes = menu.addAction("Что нового в доступной версии")
         act_notes.setEnabled(bool(self.lib.update_notes))
         act_page = menu.addAction("Страница проекта на GitHub")
+        act_log = menu.addAction("Открыть журнал действий")
         act = menu.exec(self.b_update_menu.mapToGlobal(QtCore.QPoint(0, self.b_update_menu.height())))
         if act is None:
             return
@@ -4606,6 +4631,13 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._rollback(backs[0])
         elif act is act_notes:
             QtWidgets.QMessageBox.information(self, WINDOW_TITLE, "Версия %s:\n\n%s" % (self.lib.update_latest, self.lib.update_notes))
+        elif act is act_log:
+            try:
+                if not os.path.isfile(ACTION_LOG):
+                    alog("журнал создан")
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(ACTION_LOG))
+            except Exception:
+                pass
         elif act is act_page:
             QtGui.QDesktopServices.openUrl(QtCore.QUrl(UPDATE_PROJECT_PAGE))
 
@@ -5212,6 +5244,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._status("Текущий рендерер не Corona — интерактивный рендер недоступен.", error=True)
             return
         try:
+            alog("ACTION Start Interactive Render")
             rt.CoronaRenderer.CoronaFp.startInteractive()
             self._status("Запущен интерактивный рендер Corona.")
         except Exception as ex:
@@ -5284,6 +5317,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         """Ставит HDRI в Scene Environment -> Single map (Corona). Вызывается и окном библиотеки.
         auto_exposure: при смене карты Exposure сбрасывается на 0 (если включено выравнивание яркости —
         ставится по поправке карты). Повторное применение той же карты Exposure не трогает."""
+        alog("  apply_path %s" % path)
         if not os.path.isfile(path):
             self._status("Файл не найден: %s" % path, error=True)
             return False
@@ -5444,6 +5478,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         if self._loading:
             return
         vals = self._hdri_values()
+        alog("  HDRI " + " ".join("%s=%.3g" % (k, v) for k, v in vals.items() if isinstance(v, (int, float))))
         self._skipped_channels = []
         self._no_cam = False
         res = self._run("HDRI settings", lambda: self._write_hdri(**vals))
@@ -5629,6 +5664,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         elev, azim = self.sp_elev.value(), self.sp_azim.value()
         inten, size, on = self.sp_int.value(), self.sp_size.value(), self.chk_on.isChecked()
         dist, icon = m_to_units(self.sp_dist.value()), m_to_units(self.sp_icon.value())
+        alog("SUN  elev=%.2f azim=%.2f int=%.3g size=%.3g on=%s" % (elev, azim, inten, size, on))
 
         def do():
             s = find_sun()
@@ -6198,11 +6234,20 @@ def _cleanup_old(main_win):
             w.deleteLater()
 
 
+def _alog_session():
+    try:
+        alog("=== SESSION v%s | сцена: %s | рендерер: %s" % (
+            VERSION, str(rt.maxFileName) or "(без имени)", _class_name(rt.renderers.current)))
+    except Exception:
+        alog("=== SESSION v%s" % VERSION)
+
+
 def show():
     """Окно встраивается (dock) в главное окно 3ds Max: прилипает к левому или правому краю.
     Можно перетащить за заголовок к другому краю или оторвать в плавающее окно."""
     main_win = qtmax.GetQMaxMainWindow()
     _cleanup_old(main_win)
+    _alog_session()
     win = SafeEnvironment()
     if _UPDATED_FROM:
         win._status("Обновлено: v%s → v%s." % (_UPDATED_FROM, VERSION))
