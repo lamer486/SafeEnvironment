@@ -114,6 +114,7 @@ def main():
     p1 = build("SafeEnvironment.mzp", [
         ("mzp.run", os.path.join(inst, "mzp.run")),
         ("install.ms", os.path.join(inst, "install.ms")),
+        ("uninstall.ms", os.path.join(inst, "uninstall.ms")),
         ("SafeEnvironment-SafeEnvironment.mcr", os.path.join(inst, "SafeEnvironment-SafeEnvironment.mcr")),
         ("safe_environment.py", script)])
     p2 = build("SafeEnvironment_Uninstall.mzp", [

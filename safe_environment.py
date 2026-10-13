@@ -53,7 +53,7 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.51"
+VERSION = "0.55"
 WINDOW_TITLE = "SafeEnvironment v" + VERSION
 COPYRIGHT_TEXT = ("Script created with the help of Claude AI by Vasiliy Kanevskiy, exclusively for internal use "
                   "by the Design HUB team of Kika-Braz Architects, 2026.")
@@ -264,6 +264,9 @@ class Library:
         self.acg_folder = d.get("acg_folder", "") if isinstance(d, dict) and isinstance(d.get("acg_folder", ""), str) else ""
         self.acg_res = d.get("acg_res", "4K") if isinstance(d, dict) and isinstance(d.get("acg_res", "4K"), str) else "4K"
         self.update_auto = bool(d.get("update_auto", True)) if isinstance(d, dict) else True
+        self.ui_simple = bool(d.get("ui_simple", False)) if isinstance(d, dict) else False      # режим «Просто»
+        uc = d.get("ui_collapsed", []) if isinstance(d, dict) else []
+        self.ui_collapsed = [x for x in uc if isinstance(x, str)] if isinstance(uc, list) else []   # свёрнутые секции
         try:
             self.update_checked = float(d.get("update_checked", 0.0)) if isinstance(d, dict) else 0.0
         except (TypeError, ValueError):
@@ -310,6 +313,7 @@ class Library:
                               "acg_res": self.acg_res, "acg_size": self.acg_size,
                               "ph_folder": self.ph_folder, "ph_res": self.ph_res, "ph_fmt": self.ph_fmt,
                               "update_auto": self.update_auto, "update_checked": self.update_checked,
+                              "ui_simple": self.ui_simple, "ui_collapsed": self.ui_collapsed,
                               "update_latest": self.update_latest, "update_notes": self.update_notes})
 
     # ---------- выравнивание яркости ----------
@@ -1388,6 +1392,241 @@ def ensure_icon(sun, size):
 # ==========================================================================
 # 5. Виджеты
 # ==========================================================================
+
+# ---------------------------------------------------------------------------------------------
+# Оформление (v0.52): единая палитра, карточки, значки. Только внешний вид — на логику не влияет.
+# Стили применяются к окну скрипта, а не ко всему 3ds Max; любая ошибка оформления игнорируется.
+# ---------------------------------------------------------------------------------------------
+UI_ACCENT = "#e0902f"          # тёплый «солнечный» акцент
+UI_ACCENT_HOVER = "#eda24a"
+UI_CARD_BG = "#3a3a3a"
+UI_CARD_BORDER = "#4d4d4d"
+UI_BTN_BG = "#4a4a4a"
+UI_BTN_HOVER = "#585858"
+UI_BTN_PRESSED = "#3a3a3a"
+
+UI_QSS = """
+QGroupBox {
+    background-color: %(card)s; border: 1px solid %(border)s; border-radius: 6px;
+    margin-top: 14px; padding: 8px 6px 6px 6px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin; subcontrol-position: top left; left: 8px; padding: 0 4px;
+    color: %(accent)s; font-weight: bold;
+}
+QPushButton {
+    background-color: %(btn)s; border: 1px solid %(border)s; border-radius: 4px; padding: 4px 8px; min-height: 16px;
+}
+QPushButton:hover { background-color: %(hover)s; }
+QPushButton:pressed { background-color: %(pressed)s; }
+QPushButton:disabled { color: #888888; background-color: #404040; }
+QPushButton[primary="true"] {
+    background-color: %(accent)s; border: 1px solid %(accent)s; color: #1e1e1e; font-weight: bold;
+}
+QPushButton[primary="true"]:hover { background-color: %(accent_hover)s; }
+QPushButton[primary="true"]:pressed { background-color: #c07a22; }
+QPushButton[flat_link="true"] { background-color: transparent; border: none; color: #a8a8a8; }
+QPushButton[flat_link="true"]:hover { color: %(accent)s; }
+QFrame#card {
+    background-color: %(card)s; border: 1px solid %(border)s; border-radius: 6px;
+}
+QPushButton[cardhead="true"] {
+    background-color: transparent; border: none; text-align: left; padding: 3px 2px;
+    color: %(accent)s; font-weight: bold;
+}
+QPushButton[cardhead="true"]:hover { color: %(accent_hover)s; }
+QPushButton[seg="true"] { border-radius: 0px; }
+QPushButton[seg="true"]:checked { background-color: %(accent)s; color: #1e1e1e; font-weight: bold; border: 1px solid %(accent)s; }
+QSlider::groove:horizontal { height: 4px; background: #555555; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: %(accent)s; border-radius: 2px; }
+QSlider::handle:horizontal {
+    background: #e8e8e8; width: 12px; height: 12px; margin: -5px 0; border-radius: 6px;
+}
+QSlider::handle:horizontal:hover { background: #ffffff; }
+QProgressBar { border: 1px solid %(border)s; border-radius: 4px; background: #2e2e2e; text-align: center; }
+QProgressBar::chunk { background-color: %(accent)s; border-radius: 3px; }
+""" % dict(card=UI_CARD_BG, border=UI_CARD_BORDER, accent=UI_ACCENT, accent_hover=UI_ACCENT_HOVER,
+           btn=UI_BTN_BG, hover=UI_BTN_HOVER, pressed=UI_BTN_PRESSED)
+
+
+def make_icon(name, color="#e8e8e8", size=64):
+    """Простые векторные значки, нарисованные QPainter (без внешних файлов и модулей). None при любой ошибке."""
+    try:
+        pm = QtGui.QPixmap(size, size)
+        pm.fill(QtCore.Qt.transparent)
+        p = QtGui.QPainter(pm)
+        p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        pen = QtGui.QPen(QtGui.QColor(color))
+        pen.setWidthF(size * 0.085)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
+        p.setPen(pen)
+        k = size / 64.0
+        P = lambda x, y: QtCore.QPointF(x * k, y * k)
+        fill = QtGui.QColor(color)
+
+        def poly(pts, filled=False):
+            p.setBrush(fill if filled else QtCore.Qt.NoBrush)
+            p.drawPolygon(QtGui.QPolygonF([P(x, y) for x, y in pts]))
+
+        def arc(cx, cy, r, start, span):
+            p.setBrush(QtCore.Qt.NoBrush)
+            p.drawArc(QtCore.QRectF((cx - r) * k, (cy - r) * k, 2 * r * k, 2 * r * k), int(start * 16), int(span * 16))
+
+        if name == "play":
+            poly([(20, 12), (54, 32), (20, 52)], True)
+        elif name == "prev":
+            poly([(46, 14), (18, 32), (46, 50)], True)
+        elif name == "next":
+            poly([(18, 14), (46, 32), (18, 50)], True)
+        elif name == "library":
+            for x, y in ((10, 10), (36, 10), (10, 36), (36, 36)):
+                p.setBrush(QtCore.Qt.NoBrush)
+                p.drawRoundedRect(QtCore.QRectF(x * k, y * k, 18 * k, 18 * k), 3 * k, 3 * k)
+        elif name == "reload":
+            arc(32, 32, 20, 40, 270)
+            poly([(46, 6), (54, 24), (34, 22)], True)
+        elif name == "undo":
+            arc(34, 38, 18, 0, 180)
+            p.drawLine(P(16, 38), P(16, 26))
+            poly([(6, 32), (16, 20), (26, 32)], True)
+        elif name == "redo":
+            arc(30, 38, 18, 0, 180)
+            p.drawLine(P(48, 38), P(48, 26))
+            poly([(38, 32), (48, 20), (58, 32)], True)
+        elif name == "link":
+            p.setBrush(QtCore.Qt.NoBrush)
+            p.drawRoundedRect(QtCore.QRectF(6 * k, 22 * k, 28 * k, 20 * k), 10 * k, 10 * k)
+            p.drawRoundedRect(QtCore.QRectF(30 * k, 22 * k, 28 * k, 20 * k), 10 * k, 10 * k)
+        elif name == "sun":
+            p.setBrush(QtCore.Qt.NoBrush)
+            p.drawEllipse(P(32, 32), 10 * k, 10 * k)
+            for a in range(0, 360, 45):
+                dx, dy = math.cos(math.radians(a)), math.sin(math.radians(a))
+                p.drawLine(P(32 + dx * 18, 32 + dy * 18), P(32 + dx * 26, 32 + dy * 26))
+        elif name == "reset":
+            arc(32, 32, 20, 60, 300)
+            poly([(10, 8), (14, 28), (32, 18)], True)
+        elif name == "chev_down":
+            p.drawPolyline(QtGui.QPolygonF([P(14, 24), P(32, 42), P(50, 24)]))
+        elif name == "chev_right":
+            p.drawPolyline(QtGui.QPolygonF([P(24, 14), P(42, 32), P(24, 50)]))
+        elif name == "trash":
+            p.drawLine(P(12, 16), P(52, 16))
+            p.drawLine(P(26, 16), P(26, 10)); p.drawLine(P(26, 10), P(38, 10)); p.drawLine(P(38, 10), P(38, 16))
+            poly([(16, 16), (20, 54), (44, 54), (48, 16)])
+        p.end()
+        return QtGui.QIcon(pm)
+    except Exception:
+        return None
+
+
+def set_btn_icon(btn, name, color="#e8e8e8"):
+    """Добавляет значок на кнопку; при ошибке кнопка остаётся как есть."""
+    try:
+        ic = make_icon(name, color)
+        if ic is not None:
+            btn.setIcon(ic)
+            btn.setIconSize(QtCore.QSize(16, 16))
+    except Exception:
+        pass
+
+
+class ToggleSwitch(QtWidgets.QCheckBox):
+    """Переключатель-тумблер. Обычный QCheckBox (toggled, isChecked, setChecked работают как раньше), только рисуется иначе."""
+    W, H = 30, 16
+
+    def sizeHint(self):
+        fm = self.fontMetrics()
+        tw = fm.horizontalAdvance(self.text()) if self.text() else 0
+        return QtCore.QSize(self.W + (8 + tw if tw else 0) + 2, max(self.H + 4, fm.height() + 4))
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def hitButton(self, pos):
+        return self.rect().contains(pos)
+
+    def paintEvent(self, event):
+        try:
+            p = QtGui.QPainter(self)
+            p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            on = self.isChecked()
+            enabled = self.isEnabled()
+            y = (self.height() - self.H) / 2.0
+            track = QtCore.QRectF(1, y, self.W, self.H)
+            if not enabled:
+                col = QtGui.QColor("#4a4a4a")
+            elif on:
+                col = QtGui.QColor(UI_ACCENT_HOVER if self.underMouse() else UI_ACCENT)
+            else:
+                col = QtGui.QColor("#6a6a6a" if self.underMouse() else "#5a5a5a")
+            p.setPen(QtCore.Qt.NoPen)
+            p.setBrush(col)
+            p.drawRoundedRect(track, self.H / 2.0, self.H / 2.0)
+            r = self.H - 4
+            x = track.right() - r - 2 if on else track.left() + 2
+            p.setBrush(QtGui.QColor("#f2f2f2" if enabled else "#8a8a8a"))
+            p.drawEllipse(QtCore.QRectF(x, y + 2, r, r))
+            if self.text():
+                p.setPen(QtGui.QColor("#e0e0e0" if enabled else "#808080"))
+                p.drawText(QtCore.QRectF(self.W + 10, 0, self.width() - self.W - 10, self.height()),
+                           QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft, self.text())
+            p.end()
+        except Exception:
+            pass
+
+    def enterEvent(self, e):
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.update()
+        super().leaveEvent(e)
+
+
+class CollapsibleCard(QtWidgets.QFrame):
+    """Карточка со сворачиваемым содержимым: заголовок-кнопка + body. Содержимое кладётся в self.body."""
+    state_changed = QtCore.Signal(str, bool)
+
+    def __init__(self, title, key, collapsed=False, parent=None):
+        super().__init__(parent)
+        self.key = key
+        self.setObjectName("card")
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.setContentsMargins(6, 2, 6, 6)
+        lay.setSpacing(2)
+        self.head = QtWidgets.QPushButton(title)
+        self.head.setProperty("cardhead", True)
+        self.head.setCursor(QtCore.Qt.PointingHandCursor)
+        self.head.setToolTip("Свернуть / развернуть секцию")
+        self.head.clicked.connect(self._toggle)
+        lay.addWidget(self.head)
+        self.body = QtWidgets.QWidget()
+        lay.addWidget(self.body)
+        # карточка не растягивается по высоте: лишнее место (когда окно выше содержимого) уходит вниз, под карточки
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        self.body.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        self._collapsed = False
+        self.set_collapsed(collapsed)
+
+    def is_collapsed(self):
+        return self._collapsed
+
+    def set_collapsed(self, c):
+        self._collapsed = bool(c)
+        self.body.setVisible(not self._collapsed)
+        set_btn_icon(self.head, "chev_right" if self._collapsed else "chev_down", UI_ACCENT)
+
+    def _toggle(self):
+        self.set_collapsed(not self._collapsed)
+        self.state_changed.emit(self.key, self._collapsed)
+
+
+def mark_primary(btn):
+    btn.setProperty("primary", True)
+
+
 class ClickableLabel(QtWidgets.QLabel):
     clicked = QtCore.Signal()
 
@@ -4382,9 +4621,25 @@ class SafeEnvironment(QtWidgets.QWidget):
         # --- название скрипта и версия ---
         self.lbl_title = QtWidgets.QLabel("SafeEnvironment  v" + VERSION)
         self.lbl_title.setAlignment(QtCore.Qt.AlignCenter)
-        self.lbl_title.setStyleSheet("font-weight: bold; font-size: 10pt; color: #e0e0e0; "
-                                     "padding: 2px; border-bottom: 1px solid #555;")
+        self.lbl_title.setStyleSheet("font-weight: bold; font-size: 11pt; color: #f0f0f0; "
+                                     "padding: 4px; border-bottom: 2px solid %s;" % UI_ACCENT)
         root.addWidget(self.lbl_title)
+
+        # --- режим интерфейса: Просто / Расширенный ---
+        mr = QtWidgets.QHBoxLayout()
+        mr.setSpacing(0)
+        self.b_mode_simple = QtWidgets.QPushButton("Просто")
+        self.b_mode_adv = QtWidgets.QPushButton("Расширенный")
+        for b_ in (self.b_mode_simple, self.b_mode_adv):
+            b_.setCheckable(True)
+            b_.setProperty("seg", True)
+        self.b_mode_simple.setToolTip("Только основное: превью, поворот, экспозиция, солнце и пресеты.")
+        self.b_mode_adv.setToolTip("Все параметры: Gamma, Saturation, Blur, Horizon, каналы EV, размеры солнца, компас.")
+        self.b_mode_simple.clicked.connect(lambda: self._set_simple_mode(True))
+        self.b_mode_adv.clicked.connect(lambda: self._set_simple_mode(False))
+        mr.addWidget(self.b_mode_simple)
+        mr.addWidget(self.b_mode_adv)
+        root.addLayout(mr)
 
         # --- обновления ---
         ur = QtWidgets.QHBoxLayout()
@@ -4394,7 +4649,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                                  "после вашего подтверждения; предыдущая версия сохраняется для отката.")
         self.b_update.clicked.connect(self._on_update_button)
         self.b_update_menu = QtWidgets.QPushButton("▾")
-        self.b_update_menu.setFixedWidth(22)
+        self.b_update_menu.setFixedWidth(26)
         self.b_update_menu.setToolTip("Настройки обновления")
         self.b_update_menu.clicked.connect(self._show_update_menu)
         ur.addWidget(self.b_update, 1)
@@ -4406,7 +4661,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_preview.setFixedSize(PREVIEW_W, PREVIEW_H)
         self.lbl_preview.setAlignment(QtCore.Qt.AlignCenter)
         self.lbl_preview.setCursor(QtCore.Qt.PointingHandCursor)
-        self.lbl_preview.setStyleSheet("border: 1px solid #555; background: #222;")
+        self.lbl_preview.setStyleSheet("border: 1px solid #555; border-radius: 6px; background: #222;")
         self.lbl_preview.setToolTip("Клик — открыть библиотеку HDRI")
         self.lbl_preview.clicked.connect(self.open_library)
         row = QtWidgets.QHBoxLayout()
@@ -4423,12 +4678,17 @@ class SafeEnvironment(QtWidgets.QWidget):
         b_ir.setMinimumHeight(30)
         b_ir.setToolTip("Запускает интерактивный рендер Corona (Interactive Rendering) в активном виде.")
         b_ir.clicked.connect(self.start_interactive)
+        mark_primary(b_ir)
+        set_btn_icon(b_ir, "play", "#1e1e1e")
         root.addWidget(b_ir)
         row_nav = QtWidgets.QHBoxLayout()
-        b_prev = QtWidgets.QPushButton("◀ Пред.")
+        b_prev = QtWidgets.QPushButton("Пред.")
+        set_btn_icon(b_prev, "prev")
         b_prev.setToolTip("Предыдущая HDRI в группе, выбранной в библиотеке (по кругу). Если включена привязка — солнце ставится на её яркую точку.")
         b_prev.clicked.connect(lambda: self.step_hdri(-1))
-        b_next = QtWidgets.QPushButton("След. ▶")
+        b_next = QtWidgets.QPushButton("След.")
+        set_btn_icon(b_next, "next")
+        b_next.setLayoutDirection(QtCore.Qt.RightToLeft)
         b_next.setToolTip("Следующая HDRI в группе, выбранной в библиотеке (по кругу). Если включена привязка — солнце ставится на её яркую точку.")
         b_next.clicked.connect(lambda: self.step_hdri(1))
         row_nav.addWidget(b_prev)
@@ -4436,16 +4696,19 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addLayout(row_nav)
         row = QtWidgets.QHBoxLayout()
         b_lib = QtWidgets.QPushButton("Библиотека...")
+        set_btn_icon(b_lib, "library")
         b_lib.clicked.connect(self.open_library)
         b_reload = QtWidgets.QPushButton("Перезагрузить HDR")
+        set_btn_icon(b_reload, "reload")
         b_reload.clicked.connect(self.reload_hdr)
         row.addWidget(b_lib)
         row.addWidget(b_reload)
         root.addLayout(row)
 
         # --- настройки HDRI ---
-        g = QtWidgets.QGroupBox("Настройки HDRI")
-        f = QtWidgets.QFormLayout(g)
+        g = self._card("Настройки HDRI", "hdri")
+        f = QtWidgets.QFormLayout(g.body)
+        f.setContentsMargins(0, 2, 0, 0)
         self.sp_rot = make_spin(-100000, 100000, 1, 0, "°", default=0.0, pixel_divider=1.0)   # целые градусы, 1°/пиксель
         self.sl_rot = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.sl_rot.setRange(0, 360)               # 0° — левый край, 360° — правый
@@ -4506,21 +4769,24 @@ class SafeEnvironment(QtWidgets.QWidget):
         f.addRow("Reflect EV", self.sp_refl)
         f.addRow("Refract EV", self.sp_refr)
         b_reset = QtWidgets.QPushButton("Сбросить настройки HDRI")
+        set_btn_icon(b_reset, "reset")
         b_reset.clicked.connect(self.reset_hdri_settings)
         f.addRow(b_reset)
         root.addWidget(g)
 
         # --- солнце ---
-        gs = QtWidgets.QGroupBox("Солнце (Corona Sun)")
-        sl = QtWidgets.QVBoxLayout(gs)
+        gs = self._card("Солнце (Corona Sun)", "sun")
+        sl = QtWidgets.QVBoxLayout(gs.body)
+        sl.setContentsMargins(0, 2, 0, 0)
         self.lbl_sun = QtWidgets.QLabel("Солнце: не найдено")
         sl.addWidget(self.lbl_sun)
         row = QtWidgets.QHBoxLayout()
         b_create = QtWidgets.QPushButton("Создать в центре")
+        set_btn_icon(b_create, "sun")
         b_create.clicked.connect(self.create_sun)
         b_select = QtWidgets.QPushButton("Выделить")
         b_select.clicked.connect(self.select_sun)
-        self.chk_on = QtWidgets.QCheckBox("Вкл.")
+        self.chk_on = ToggleSwitch("Вкл.")
         self.chk_on.toggled.connect(self._on_sun_setting)
         row.addWidget(b_create)
         row.addWidget(b_select)
@@ -4554,6 +4820,8 @@ class SafeEnvironment(QtWidgets.QWidget):
         b_align.setToolTip("Находит самую яркую точку текущей HDRI и ставит солнце в то же "
                            "направление с учётом Rotation.")
         b_align.clicked.connect(self.align_sun)
+        mark_primary(b_align)
+        set_btn_icon(b_align, "link", "#1e1e1e")
         sl.addWidget(b_align)
         self.prog_find = QtWidgets.QProgressBar()
         self.prog_find.setRange(0, 100)
@@ -4561,7 +4829,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.prog_find.setAlignment(QtCore.Qt.AlignCenter)
         self.prog_find.setVisible(False)
         sl.addWidget(self.prog_find)
-        self.chk_link = QtWidgets.QCheckBox("Привязать азимут к HDRI")
+        self.chk_link = ToggleSwitch("Привязать азимут к HDRI")
         self.chk_link.setToolTip("Следовать за Rotation. Пока включено, при повороте HDRI азимут солнца пересчитывается "
                                  "так, чтобы оно оставалось на яркой точке карты.\n"
                                  "По умолчанию выключено; включается само после кнопки «link to HDRI».")
@@ -4571,8 +4839,9 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addWidget(gs)
 
         # --- пресеты ---
-        gp = QtWidgets.QGroupBox("Пресеты освещения")
-        pl = QtWidgets.QVBoxLayout(gp)
+        gp = self._card("Пресеты освещения", "presets")
+        pl = QtWidgets.QVBoxLayout(gp.body)
+        pl.setContentsMargins(0, 2, 0, 0)
         self.cmb_presets = QtWidgets.QComboBox()
         pl.addWidget(self.cmb_presets)
         row = QtWidgets.QHBoxLayout()
@@ -4584,6 +4853,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         b_pupd.setToolTip("Перезаписать выбранный пресет текущими параметрами")
         b_pupd.clicked.connect(self.update_preset)
         b_pdel = QtWidgets.QPushButton("Удалить")
+        set_btn_icon(b_pdel, "trash")
         b_pdel.clicked.connect(self.delete_preset)
         grid = QtWidgets.QGridLayout()          # 2x2, чтобы панель оставалась узкой
         grid.addWidget(b_pload, 0, 0)
@@ -4617,15 +4887,17 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_status.setWordWrap(True)
         root.addWidget(self.lbl_status)
 
-        gc = QtWidgets.QGroupBox("Компас солнца")
-        cl = QtWidgets.QVBoxLayout(gc)
+        gc = self._card("Компас солнца", "compass")
+        self._card_compass = gc
+        cl = QtWidgets.QVBoxLayout(gc.body)
+        cl.setContentsMargins(0, 2, 0, 0)
         self.compass = SunCompass()
         crow = QtWidgets.QHBoxLayout()
         crow.addStretch(1)
         crow.addWidget(self.compass)
         crow.addStretch(1)
         cl.addLayout(crow)
-        self.chk_compass_tex = QtWidgets.QCheckBox("Показывать текстуру HDRI")
+        self.chk_compass_tex = ToggleSwitch("Показывать текстуру HDRI")
         self.chk_compass_tex.setChecked(True)
         self.chk_compass_tex.setToolTip("Выключить — шар без картинки (проще увидеть линии и солнце).")
         self.chk_compass_tex.toggled.connect(self.compass.set_show_tex)
@@ -4640,9 +4912,12 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addStretch(1)
 
         row_h = QtWidgets.QHBoxLayout()
-        self.b_undo = QtWidgets.QPushButton("↶ Отменить")
+        self.b_undo = QtWidgets.QPushButton("Отменить")
+        set_btn_icon(self.b_undo, "undo")
         self.b_undo.clicked.connect(self.hist_undo)
-        self.b_redo = QtWidgets.QPushButton("Вернуть ↷")
+        self.b_redo = QtWidgets.QPushButton("Вернуть")
+        set_btn_icon(self.b_redo, "redo")
+        self.b_redo.setLayoutDirection(QtCore.Qt.RightToLeft)
         self.b_redo.clicked.connect(self.hist_redo)
         row_h.addWidget(self.b_undo)
         row_h.addWidget(self.b_redo)
@@ -4654,6 +4929,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         b_all.setToolTip("Удаляет солнце (с целью и значком), очищает слот Single map (Scene Environment) "
                          "и возвращает все параметры к базовым.")
         b_all.clicked.connect(self.reset_all)
+        set_btn_icon(b_all, "reset")
         root.addWidget(b_all)
 
         self.lbl_copyright = QtWidgets.QLabel(COPYRIGHT_TEXT)
@@ -4661,6 +4937,49 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_copyright.setAlignment(QtCore.Qt.AlignCenter)
         self.lbl_copyright.setStyleSheet("color: #8a8a8a; font-size: 8pt;")
         root.addWidget(self.lbl_copyright)
+        try:
+            self.setStyleSheet(UI_QSS)                      # оформление v0.52 (только это окно)
+        except Exception:
+            pass
+        # элементы, которые прячутся в режиме «Просто» (значения при этом сохраняются и продолжают действовать)
+        self._adv_items = [(f, self.sp_gamma), (f, self.sp_sat), (f, row_blur), (f, self.sp_horizon),
+                           (f, self.cmb_target), (f, self.sp_cam), (f, self.sp_refl), (f, self.sp_refr),
+                           (fs, self.sp_size), (fs, self.sp_dist), (fs, self.sp_icon)]
+        self._adv_widgets = [b_pexp, b_pimp, b_pscene, self._card_compass]
+        self._apply_mode()
+
+    def _card(self, title, key):
+        card = CollapsibleCard(title, key, collapsed=(key in self.lib.ui_collapsed))
+        card.state_changed.connect(self._on_card_toggled)
+        return card
+
+    def _on_card_toggled(self, key, collapsed):
+        try:
+            cur = [k for k in self.lib.ui_collapsed if k != key]
+            if collapsed:
+                cur.append(key)
+            self.lib.ui_collapsed = cur
+            self._save_lib()
+        except Exception:
+            pass
+
+    def _set_simple_mode(self, simple):
+        self.lib.ui_simple = bool(simple)
+        self._save_lib()
+        self._apply_mode()
+
+    def _apply_mode(self):
+        """Режим «Просто» только прячет редкие элементы; параметры и их значения не меняются."""
+        simple = bool(self.lib.ui_simple)
+        try:
+            self.b_mode_simple.setChecked(simple)
+            self.b_mode_adv.setChecked(not simple)
+            for form, item in self._adv_items:
+                form.setRowVisible(item, not simple)
+            for w in self._adv_widgets:
+                w.setVisible(not simple)
+        except Exception:
+            print("[SafeEnvironment] apply_mode error:\n" + traceback.format_exc())
 
     @undoable("Смена HDRI")
     def step_hdri(self, direction):

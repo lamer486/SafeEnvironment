@@ -1,6 +1,8 @@
 name "SafeEnvironment"
-version 1.00
+version 1.02
 clear temp on MAX exit
 copy "safe_environment.py" to "$userscripts\SafeEnvironment"
+copy "uninstall.ms" to "$userscripts\SafeEnvironment"
 copy "SafeEnvironment-SafeEnvironment.mcr" to "$usermacros"
 run "install.ms"
+drop "install.ms"

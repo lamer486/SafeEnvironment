@@ -28,7 +28,8 @@ Corona Sun, привязанный к самой яркой точке карт�
 Предыдущая версия сохраняется — меню **«▾» → «Вернуть предыдущую версию»**. Автопроверку можно отключить там же.
 
 ## Удаление
-Перетащите в окно Max `dist/SafeEnvironment_Uninstall.mzp`. Библиотека, пресеты и кэш лежат отдельно в
+В Max: **Customize → Customize User Interface → Toolbars**, категория **SafeEnvironment**, кнопка **«Uninstall SafeEnvironment»**
+(перетащите её на панель и нажмите) — или перетащите в окно Max `dist/SafeEnvironment_Uninstall.mzp`. Библиотека, пресеты и кэш лежат отдельно в
 `%APPDATA%\SafeEnvironment` — установщик спросит, удалять ли их.
 
 ## Где что хранится
