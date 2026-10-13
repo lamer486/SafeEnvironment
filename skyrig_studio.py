@@ -52,9 +52,12 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.60"
+VERSION = "0.70"
 WINDOW_TITLE = "SkyRig Studio v" + VERSION
 COPYRIGHT_TEXT = "Script created with the help of Claude AI by Vasiliy Kanevskiy, 2026."
+CONTACT_EMAIL = "kanevskiy.vasiliy@gmail.com"
+DONATE_URL = "https://paypal.me/Vkanevskiy"
+DONATE_TEXT_BTN = "♥ Donate"
 WINDOW_OBJ_NAME = "SafeEnvironmentWindow"
 DOCK_OBJ_NAME = "SafeEnvironmentDock"
 LIBRARY_OBJ_NAME = "SafeEnvironmentLibrary"
@@ -66,7 +69,7 @@ PRESETS_FORMAT = "SafeEnvironmentPresets"
 ALL_GROUP = "Все файлы"              # виртуальная группа: объединение всех групп
 THUMB_W, THUMB_H = 256, 128
 PREVIEW_W, PREVIEW_H = 200, 100        # превью в главном окне (компактное)
-DOCK_WIDTH = 255                       # ширина док-панели
+DOCK_WIDTH = 288                       # ширина док-панели (и минимальная: уже — кнопки уходят за край)
 THUMB_GAMMA = 1.0                     # гамма превью (1.0 = без гамма-кривой)
 THUMB_EV_RANGE = 4.0                  # ползунок экспозиции превью: ±EV
 ICON_NAME = "EnvSunIcon"
@@ -1651,6 +1654,20 @@ class CollapsibleCard(QtWidgets.QFrame):
     def _toggle(self):
         self.set_collapsed(not self._collapsed)
         self.state_changed.emit(self.key, self._collapsed)
+
+
+class TargetCombo(QtWidgets.QComboBox):
+    """Список «Каналы EV в»: пункт про камеру подписан именем активной CoronaCam; имя обновляется при раскрытии списка."""
+    def __init__(self, refresh, parent=None):
+        super().__init__(parent)
+        self._refresh = refresh
+
+    def showPopup(self):
+        try:
+            self._refresh()
+        except Exception:
+            pass
+        super().showPopup()
 
 
 def mark_primary(btn):
@@ -4818,9 +4835,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         row_blur.addStretch(1)
         f.addRow("Blur", row_blur)
         f.addRow("Horizon", self.sp_horizon)
-        self.cmb_target = QtWidgets.QComboBox()
+        self.cmb_target = TargetCombo(self._refresh_target_label)
         self.cmb_target.addItem("Общие настройки Corona", TARGET_RENDERER)
         self.cmb_target.addItem("Активная CoronaCam", TARGET_CAMERA)
+        self._refresh_target_label()
         self.cmb_target.setCurrentIndex(1 if self.lib.channel_target == TARGET_CAMERA else 0)
         self.cmb_target.setToolTip("Куда писать Direct / Reflect / Refract EV: в Scene Environment общих настроек Corona "
                                    "или в Environment override активной (в текущем виде) CoronaCam.")
@@ -4998,6 +5016,20 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_copyright.setAlignment(QtCore.Qt.AlignCenter)
         self.lbl_copyright.setStyleSheet("color: #8a8a8a; font-size: 8pt;")
         root.addWidget(self.lbl_copyright)
+        self.lbl_mail = QtWidgets.QLabel('<a href="mailto:%s" style="color:#8a8a8a;">%s</a>' % (CONTACT_EMAIL, CONTACT_EMAIL))
+        self.lbl_mail.setAlignment(QtCore.Qt.AlignCenter)
+        self.lbl_mail.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction | QtCore.Qt.TextSelectableByMouse)
+        self.lbl_mail.setOpenExternalLinks(True)
+        self.lbl_mail.setStyleSheet("color: #8a8a8a; font-size: 8pt;")
+        root.addWidget(self.lbl_mail)
+        if DONATE_URL:
+            bd = QtWidgets.QPushButton(DONATE_TEXT_BTN)
+            bd.setMinimumHeight(28)
+            bd.setProperty("primary", True)
+            bd.setCursor(QtCore.Qt.PointingHandCursor)
+            bd.setToolTip("Поддержать автора через PayPal (откроется в браузере)")
+            bd.clicked.connect(lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(DONATE_URL)))
+            root.addWidget(bd)
         try:
             self.setStyleSheet(UI_QSS)                      # оформление v0.52 (только это окно)
         except Exception:
@@ -5447,6 +5479,18 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._skipped_channels = skipped
         self._no_cam = no_cam
         return True
+
+    def _refresh_target_label(self):
+        """Подпись пункта камеры: полное имя активной CoronaCam (если вид не из CoronaCam — «Активная CoronaCam»)."""
+        try:
+            c = active_corona_cam()
+            name = str(c.name) if c is not None else ""
+        except Exception:
+            name = ""
+        txt = name or "Активная CoronaCam"
+        i = self.cmb_target.findData(TARGET_CAMERA)
+        if i >= 0 and self.cmb_target.itemText(i) != txt:
+            self.cmb_target.setItemText(i, txt)
 
     def _on_target_changed(self, *_):
         self.lib.channel_target = self.cmb_target.currentData() or TARGET_RENDERER
@@ -6268,7 +6312,7 @@ def show():
                          | QtWidgets.QDockWidget.DockWidgetFloatable
                          | QtWidgets.QDockWidget.DockWidgetClosable)
         dock.setWidget(scroll)
-        dock.setMinimumWidth(DOCK_WIDTH - 5)
+        dock.setMinimumWidth(DOCK_WIDTH)
         main_win.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dock)
         try:
             main_win.resizeDocks([dock], [DOCK_WIDTH], QtCore.Qt.Horizontal)
