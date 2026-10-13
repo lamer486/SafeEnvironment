@@ -54,7 +54,7 @@ HDRI, находит самую яркую точку (солнце на кар�
 - Windows. Для обновлений и загрузки карт — доступ в интернет (сам скрипт работает и без него).
 
 ## Установка
-1. Скачайте [`dist/SkyRigStudio.mzp`](https://github.com/lamer486/SkyRigStudio/raw/main/dist/SkyRigStudio.mzp).
+1. Скачайте [`dist/SkyRigStudio_v0.70.mzp`](https://github.com/lamer486/SkyRigStudio/raw/main/dist/SkyRigStudio_v0.70.mzp).
 2. Перетащите файл мышью в окно 3ds Max (в любой вьюпорт). Установщик скопирует скрипт и создаст кнопку.
 3. Выведите кнопку на панель: **Customize → Customize User Interface → Toolbars** (или Menus / Quads) →
    категория **SkyRig Studio** → перетащите «SkyRig Studio» на панель. Запуск — по этой кнопке.
@@ -118,6 +118,6 @@ SkyRig Studio finds the sun on any HDRI map and links Corona Sun to it with one 
 brightest point and aims Corona Sun in the same direction, accounting for the map rotation. With azimuth link enabled the
 sun follows the map when you rotate it. Also: HDRI library, brightness leveling, presets, ambientCG / Poly Haven (CC0)
 downloaders, own undo/redo, Simple / Expert modes. For 3ds Max 2025+ with Corona. Install: drag
-`dist/SkyRigStudio.mzp` into the 3ds Max window, then add the **SkyRig Studio** macro (category *SkyRig Studio*) to a
+`dist/SkyRigStudio_v0.70.mzp` into the 3ds Max window, then add the **SkyRig Studio** macro (category *SkyRig Studio*) to a
 toolbar. Updates: button at the top of the panel (checks `version.json` on GitHub, verifies SHA-256, keeps a backup for
 rollback). Uninstall: drag `dist/SkyRigStudio_Uninstall.mzp`. User data lives in `%APPDATA%\SafeEnvironment`.

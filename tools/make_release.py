@@ -13,7 +13,7 @@
      (на эту копию ссылается version.json);
   4. считает sha256 и пишет version.json (его читает кнопка «Обновить» в скрипте);
   5. добавляет запись в CHANGELOG.md;
-  6. собирает установщики dist/SkyRigStudio.mzp и dist/SkyRigStudio_Uninstall.mzp.
+  6. собирает установщики dist/SkyRigStudio_vX.Y.mzp и dist/SkyRigStudio_Uninstall.mzp.
 Потом загрузите изменённые файлы в репозиторий (commit + push или «Upload files» на сайте GitHub).
 """
 import argparse
@@ -111,7 +111,11 @@ def main():
                 z.write(src, arc)
         return p
 
-    p1 = build("SkyRigStudio.mzp", [
+    import glob
+    for old in glob.glob(os.path.join(dist, "SkyRigStudio*.mzp")):
+        if not old.endswith("_Uninstall.mzp"):
+            os.remove(old)
+    p1 = build("SkyRigStudio_v%s.mzp" % version, [
         ("mzp.run", os.path.join(inst, "mzp.run")),
         ("install.ms", os.path.join(inst, "install.ms")),
         ("uninstall.ms", os.path.join(inst, "uninstall.ms")),
@@ -120,6 +124,12 @@ def main():
     p2 = build("SkyRigStudio_Uninstall.mzp", [
         ("mzp.run", os.path.join(inst, "uninstall.mzp.run")),
         ("uninstall.ms", os.path.join(inst, "uninstall.ms"))])
+
+    rd = os.path.join(ROOT, "README.md")
+    if os.path.isfile(rd):
+        t = read(rd)
+        t = re.sub(r"SkyRigStudio(_v[\d.]+)?\.mzp", "SkyRigStudio_v%s.mzp" % version, t)
+        write(rd, t)
 
     print("Версия:      %s" % version)
     print("sha256:      %s" % sha)
