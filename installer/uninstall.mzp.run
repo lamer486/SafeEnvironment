@@ -1,0 +1,4 @@
+name "SafeEnvironment uninstall"
+version 1.00
+clear temp on MAX exit
+run "uninstall.ms"

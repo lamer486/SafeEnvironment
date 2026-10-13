@@ -1,0 +1,78 @@
+# SafeEnvironment
+
+Окружение (HDRI + Corona Sun) для **3ds Max + Corona Renderer** — безопасная замена QuickEnvironment.
+Скрипт ничего не делает «в фоне» и не слушает Max: каждое действие — один undo-блок.
+
+**Что умеет:** библиотека HDRI с группами, тегами и превью · поворот / Exposure / Gamma / Saturation / Blur / Horizon ·
+Corona Sun, привязанный к самой яркой точке карты, компас солнца · пресеты освещения · выравнивание яркости всех карт
+по эталонной · загрузка бесплатных карт с **ambientCG** и **Poly Haven** прямо из окна · своя история изменений (undo/redo) ·
+обновление скрипта одной кнопкой.
+
+## Требования
+- 3ds Max **2025 или новее** (нужен PySide6; проверено на 3ds Max 2027).
+- Corona Renderer (проверено на Corona 16).
+- Windows. Для обновлений и загрузки карт — доступ в интернет (сам скрипт работает и без него).
+
+## Установка
+1. Скачайте [`dist/SafeEnvironment.mzp`](https://github.com/lamer486/SafeEnvironment/raw/main/dist/SafeEnvironment.mzp).
+2. Перетащите файл мышью в окно 3ds Max (в любой вьюпорт). Установщик скопирует скрипт и создаст кнопку.
+3. Выведите кнопку на панель: **Customize → Customize User Interface → Toolbars** (или Menus / Quads) →
+   категория **SafeEnvironment** → перетащите «SafeEnvironment» на панель. Запуск — по этой кнопке.
+
+Окно встраивается слева в интерфейс Max (его можно перетащить к правому краю или оторвать).
+
+## Обновление
+В верху окна есть кнопка **«Проверить обновления»**. Раз в сутки скрипт тихо проверяет версию сам; если вышла новая,
+кнопка становится зелёной — **«Обновить до vX.Y»**. Нажмите её, прочтите список изменений и подтвердите:
+файл скачивается, проверяется (контрольная сумма sha256, синтаксис, номер версии), и окно перезапускается.
+Предыдущая версия сохраняется — меню **«▾» → «Вернуть предыдущую версию»**. Автопроверку можно отключить там же.
+
+## Удаление
+Перетащите в окно Max `dist/SafeEnvironment_Uninstall.mzp`. Библиотека, пресеты и кэш лежат отдельно в
+`%APPDATA%\SafeEnvironment` — установщик спросит, удалять ли их.
+
+## Где что хранится
+| Что | Где |
+|---|---|
+| Скрипт | `%LOCALAPPDATA%\Autodesk\3dsMax\<версия> - 64bit\ENU\scripts\SafeEnvironment\` |
+| Библиотека, пресеты, кэш, резервные копии версий | `%APPDATA%\SafeEnvironment\` |
+| Сцена 3ds Max | скрипт ничего в неё не записывает, кроме самого окружения (Corona Color Correct → CoronaBitmap) и одного Corona Sun |
+
+Библиотека хранит **полные пути** к HDRI, поэтому на другом компьютере она начинается пустой; перенос — кнопки
+«Сохранить библиотеку в файл» / «Загрузить библиотеку из файла» (сами HDRI при этом не копируются).
+
+## Интернет и приватность
+Скрипт обращается в сеть только: (1) раз в сутки к `raw.githubusercontent.com` за номером версии (можно выключить),
+(2) по вашей команде — к `ambientcg.com` и `polyhaven.com` за каталогом и картами (лицензия CC0), (3) по кнопке «Обновить» —
+за новым файлом скрипта. Никаких данных о вас или сцене не отправляется.
+
+---
+
+## Для владельца репозитория: как выпустить новую версию
+Нужен Python 3 (подойдёт любой). В корне репозитория:
+
+```
+python tools/make_release.py --src safe_environment_v0.51.py --notes "Что нового 1" "Что нового 2"
+```
+
+Скрипт проверит файл, пропишет адрес обновлений, посчитает контрольную сумму, обновит `version.json`, `CHANGELOG.md`
+и пересоберёт `dist/*.mzp`. Затем загрузите изменённые файлы в репозиторий (`git add -A && git commit && git push`
+или «Add file → Upload files» на сайте GitHub). Пользователи увидят обновление в течение суток (или сразу по кнопке).
+
+Важно: `version.json` и `safe_environment.py` должны попадать в репозиторий **вместе** — контрольная сумма в манифесте
+привязана к файлу; если они разойдутся, скрипты у пользователей откажутся обновляться (это защита).
+
+Первый выпуск (один раз, указываем логин и имя репозитория):
+```
+python tools/make_release.py --src safe_environment_v0.50.py --repo ВАШ_ЛОГИН/SafeEnvironment --notes "Первая публикация"
+```
+
+Репозиторий должен быть **публичным** (иначе `raw.githubusercontent.com` не отдаёт файлы без токена).
+Адрес манифеста можно переопределить без правки скрипта: положите его в первую строку файла
+`%APPDATA%\SafeEnvironment\update_url.txt` (например, для тестовой ветки или файла на сетевой папке).
+
+## English (short)
+SafeEnvironment — HDRI + Corona Sun environment tool for 3ds Max 2025+ with Corona. Install: drag
+`dist/SafeEnvironment.mzp` into the 3ds Max window, then add the **SafeEnvironment** macro (category *SafeEnvironment*) to a
+toolbar. Updates: button at the top of the panel (checks `version.json` on GitHub, verifies SHA-256, keeps a backup for
+rollback). Uninstall: drag `dist/SafeEnvironment_Uninstall.mzp`. User data lives in `%APPDATA%\SafeEnvironment`.
