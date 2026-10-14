@@ -1,5 +1,10 @@
 # История версий
 
+## v0.72 — 2026-10-14
+- Full English interface (English only)
+- Old Russian tags migrate automatically
+- English installer
+
 ## v0.70 — 2026-10-13
 - Кнопка Donate (PayPal) и почта автора внизу окна
 - Окно нельзя сделать уже 288 px: кнопки больше не уходят за край

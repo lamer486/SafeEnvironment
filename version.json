@@ -1,11 +1,11 @@
 {
-  "version": "0.70",
-  "file": "releases/skyrig_studio_v0.70.py",
-  "sha256": "e545488d3ada155fbfd5ab5de7ae209d1feb62fa7b337e42616310120125c7ca",
-  "date": "2026-10-13",
+  "version": "0.72",
+  "file": "releases/skyrig_studio_v0.72.py",
+  "sha256": "c86bd9b42d4ea7cab1ca3d8d79e17ee4c6985c1b1d471808240624fba25c545b",
+  "date": "2026-10-14",
   "notes": [
-    "Кнопка Donate (PayPal) и почта автора внизу окна",
-    "Окно нельзя сделать уже 288 px: кнопки больше не уходят за край",
-    "В списке «Каналы EV в» вместо «Активная CoronaCam» показывается полное имя активной камеры"
+    "Full English interface (English only)",
+    "Old Russian tags migrate automatically",
+    "English installer"
   ]
 }

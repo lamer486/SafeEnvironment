@@ -52,7 +52,7 @@ import pymxs
 from PySide6 import QtWidgets, QtCore, QtGui
 import qtmax
 
-VERSION = "0.70"
+VERSION = "0.72"
 WINDOW_TITLE = "SkyRig Studio v" + VERSION
 COPYRIGHT_TEXT = "Script created with the help of Claude AI by Vasiliy Kanevskiy, 2026."
 CONTACT_EMAIL = "kanevskiy.vasiliy@gmail.com"
@@ -66,7 +66,7 @@ SUN_NAME = "EnvSun"
 HDRI_EXTS = (".hdr", ".exr")
 BACKUP_FORMAT = "SafeEnvironmentLibrary"
 PRESETS_FORMAT = "SafeEnvironmentPresets"
-ALL_GROUP = "Все файлы"              # виртуальная группа: объединение всех групп
+ALL_GROUP = "All files"              # виртуальная группа: объединение всех групп
 THUMB_W, THUMB_H = 256, 128
 PREVIEW_W, PREVIEW_H = 200, 100        # превью в главном окне (компактное)
 DOCK_WIDTH = 288                       # ширина док-панели (и минимальная: уже — кнопки уходят за край)
@@ -251,6 +251,16 @@ def rot_to_slider(v):
     return 360 if (r == 0 and v > 0) else r
 
 
+# Названия тегов освещения (в том числе от старых русских версий) -> названия текущего языка
+_TAG_ALIASES = {"утро": "Morning", "полдень": "Noon", "после обеда": "Afternoon", "вечер": "Evening",
+                "ночь": "Night", "пасмурное небо": "Overcast", "morning": "Morning", "noon": "Noon",
+                "afternoon": "Afternoon", "evening": "Evening", "night": "Night", "overcast": "Overcast"}
+
+
+def _tag_en(t):
+    return _TAG_ALIASES.get(str(t).strip().casefold(), t)
+
+
 class Library:
     """Группы HDRI: [{"name": str, "files": [path, ...]}]. Файл может быть в нескольких группах."""
 
@@ -269,7 +279,7 @@ class Library:
         self.auto_light = {}                 # path_key -> класс освещения, поставленный автоматически
         raw_al = d.get("auto_light", {}) if isinstance(d, dict) else {}
         if isinstance(raw_al, dict):
-            self.auto_light = {k: v for k, v in raw_al.items() if isinstance(k, str) and v in LIGHT_CLASSES}
+            self.auto_light = {k: _tag_en(v) for k, v in raw_al.items() if isinstance(k, str) and _tag_en(v) in LIGHT_CLASSES}
         self.brightness = {}                 # path_key -> {"full": log2 E, "sky": log2 E}
         raw_b = d.get("brightness", {}) if isinstance(d, dict) else {}
         if isinstance(raw_b, dict):
@@ -307,7 +317,7 @@ class Library:
         if isinstance(raw, dict):
             for k, v in raw.items():
                 if isinstance(k, str) and isinstance(v, list):
-                    lst = self._clean_tags([t for t in v if isinstance(t, str)])
+                    lst = self._clean_tags([_tag_en(t) for t in v if isinstance(t, str)])
                     if lst:
                         self.tags[k] = lst
         try:
@@ -432,9 +442,9 @@ class Library:
             with open(path, "r", encoding="utf-8") as fh:
                 d = json.load(fh)
         except Exception as ex:
-            raise ValueError("не удалось прочитать файл: %s" % ex)
+            raise ValueError("could not read file: %s" % ex)
         if not isinstance(d, dict) or not isinstance(d.get("groups"), list):
-            raise ValueError("это не резервный файл библиотеки SkyRig Studio")
+            raise ValueError("this is not a SkyRig Studio library backup")
         groups = []
         for g in d["groups"]:
             if isinstance(g, dict) and isinstance(g.get("name"), str):
@@ -480,7 +490,7 @@ class Library:
         return None
 
     def unique_name(self, base):
-        base = (base or "").strip() or "Группа"
+        base = (base or "").strip() or "Group"
         if base == ALL_GROUP:
             base += " (1)"
         name, i = base, 2
@@ -574,9 +584,9 @@ class PresetStore:
             with open(path, "r", encoding="utf-8") as fh:
                 d = json.load(fh)
         except Exception as ex:
-            raise ValueError("не удалось прочитать файл: %s" % ex)
+            raise ValueError("could not read file: %s" % ex)
         if not isinstance(d, dict) or d.get("format") != PRESETS_FORMAT or not isinstance(d.get("presets"), dict):
-            raise ValueError("это не файл пресетов SkyRig Studio")
+            raise ValueError("this is not a SkyRig Studio presets file")
         return {n: v for n, v in d["presets"].items() if isinstance(n, str) and isinstance(v, dict)}
 
     def import_presets(self, presets, on_conflict="rename"):
@@ -629,7 +639,7 @@ class SunCache:
 def mxs_path(p):
     p = os.path.normpath(p)
     if '"' in p or "\n" in p:
-        raise ValueError("недопустимые символы в пути: %r" % p)
+        raise ValueError("invalid characters in path: %r" % p)
     return '@"%s"' % p
 
 
@@ -761,13 +771,13 @@ def find_brightest(path, progress=None):
         return progress(pc, text) is not False
 
     try:
-        if not report(0, "Открываю HDRI..."):
+        if not report(0, "Opening HDRI..."):
             return None
         info = rt.execute(FINDSUN_OPEN_MXS.replace("@SRC@", mxs_path(path)))
         if info is None:
             return None
         w, h, sw, sh = int(info[0]), int(info[1]), int(info[2]), int(info[3])
-        if not report(15, "Поиск самой яркой точки..."):
+        if not report(15, "Looking for the brightest point..."):
             return None
         best, bpx, bpy = -1.0, 0, 0
         strip = 64
@@ -778,7 +788,7 @@ def find_brightest(path, progress=None):
             if float(r[0]) > best:
                 best, bpx, bpy = float(r[0]), int(r[1]), int(r[2])
             y = y1 + 1
-            if not report(15 + int(55 * y / sh), "Поиск самой яркой точки..."):
+            if not report(15 + int(55 * y / sh), "Looking for the brightest point..."):
                 return None
         scx, scy = w / float(sw), h / float(sh)
         cx, cy = int((bpx + 0.5) * scx), int((bpy + 0.5) * scy)
@@ -786,13 +796,13 @@ def find_brightest(path, progress=None):
         px = py = 0.0
         peak = 0.0
         for it in range(4):
-            if not report(70 + it * 7, "Уточняю положение (%d из 4)..." % (it + 1)):
+            if not report(70 + it * 7, "Refining position (%d of 4)..." % (it + 1)):
                 return None
             r = rt.execute(FINDSUN_REFINE_MXS.replace("@CX@", str(cx)).replace("@CY@", str(cy))
                            .replace("@R@", str(R)))
             px, py, peak = float(r[0]), float(r[1]), float(r[2])
             cx, cy = int(px), int(py)
-        report(100, "Готово")
+        report(100, "Done")
         u = (px / w) % 1.0
         return u, py / h, peak / 255.0
     finally:
@@ -805,8 +815,8 @@ def find_brightest(path, progress=None):
 # ==========================================================================
 # 3b. Определение типа освещения HDRI (по названию файла и по кэшу превью .lin)
 # ==========================================================================
-LIGHT_MORNING, LIGHT_NOON, LIGHT_AFTERNOON = "Утро", "Полдень", "После обеда"
-LIGHT_EVENING, LIGHT_NIGHT, LIGHT_OVERCAST = "Вечер", "Ночь", "Пасмурное небо"
+LIGHT_MORNING, LIGHT_NOON, LIGHT_AFTERNOON = "Morning", "Noon", "Afternoon"
+LIGHT_EVENING, LIGHT_NIGHT, LIGHT_OVERCAST = "Evening", "Night", "Overcast"
 LIGHT_CLASSES = (LIGHT_MORNING, LIGHT_NOON, LIGHT_AFTERNOON, LIGHT_EVENING, LIGHT_NIGHT, LIGHT_OVERCAST)
 
 # Пороги подобраны для HDRI в физическом масштабе (небо днём — единицы…десятки, солнце — тысячи+).
@@ -851,7 +861,7 @@ def read_lin(path):
     px = array.array("f")
     px.frombytes(data[8:8 + w * h * 12])
     if len(px) != w * h * 3:
-        raise ValueError("повреждён кэш превью")
+        raise ValueError("preview cache is damaged")
     return w, h, px
 
 
@@ -1008,7 +1018,7 @@ def classify_light(w, h, px):
     sun_frac = se / tot_e if tot_e > 0 else 0.0
     ratio = best / sky_mean if sky_mean > 0 else 0.0
     rb = sr / sb if sb > 1e-9 else 1.0
-    info = "небо %.3g, пик/небо %.0f, доля солнца %.2f, высота %.0f°, R/B %.2f" % (
+    info = "sky %.3g, peak/sky %.0f, sun share %.2f, elevation %.0f°, R/B %.2f" % (
         sky_mean, ratio, sun_frac, sun_el, rb)
     if sky_mean < LIGHT_NIGHT_SKY_MEAN:
         return LIGHT_NIGHT, info
@@ -1028,14 +1038,14 @@ def detect_light(path, use_name=True):
     if use_name:
         c = light_from_name(path)
         if c:
-            return c, "по названию файла"
+            return c, "from file name"
     if not os.path.isfile(lin_path(path)):
         make_thumb(path, 0.0)
     if not os.path.isfile(lin_path(path)):
-        return None, "не удалось прочитать файл"
+        return None, "could not read the file"
     w, h, px = read_lin(path)
     cls, info = classify_light(w, h, px)
-    return cls, "по картинке (%s)" % info
+    return cls, "from image (%s)" % info
 
 
 def render_thumb(path, ev):
@@ -1047,7 +1057,7 @@ def render_thumb(path, ev):
     px = array.array("f")
     px.frombytes(data[8:8 + w * h * 12])
     if len(px) != w * h * 3:
-        raise ValueError("повреждён кэш превью")
+        raise ValueError("preview cache is damaged")
     n = w * h
     # автоэкспозиция: средняя яркость -> 0.4; затем смещение ползунком
     tot = 0.0
@@ -1200,7 +1210,7 @@ def set_single_map(m):
     """Кладёт карту в Single map и переключает Scene Environment на «Single map»."""
     r = corona_renderer()
     if r is None:
-        raise RuntimeError("Текущий рендерер не Corona")
+        raise RuntimeError("Current renderer is not Corona")
     r.bg_texmap = m
     r.bg_source = SINGLE_MAP_SOURCE
     try:
@@ -1632,7 +1642,7 @@ class CollapsibleCard(QtWidgets.QFrame):
         self.head = QtWidgets.QPushButton(title)
         self.head.setProperty("cardhead", True)
         self.head.setCursor(QtCore.Qt.PointingHandCursor)
-        self.head.setToolTip("Свернуть / развернуть секцию")
+        self.head.setToolTip("Collapse / expand section")
         self.head.clicked.connect(self._toggle)
         lay.addWidget(self.head)
         self.body = QtWidgets.QWidget()
@@ -1820,21 +1830,21 @@ class TagsDialog(QtWidgets.QDialog):
 
     def __init__(self, parent, n_files, current_tags, all_tags):
         super().__init__(parent)
-        self.setWindowTitle("Теги")
+        self.setWindowTitle("Tags")
         lay = QtWidgets.QVBoxLayout(self)
-        lay.addWidget(QtWidgets.QLabel("Выбрано файлов: %d" % n_files))
-        self.lbl_cur = QtWidgets.QLabel("Теги выбранных: " + (", ".join(current_tags) if current_tags else "—"))
+        lay.addWidget(QtWidgets.QLabel("Files selected: %d" % n_files))
+        self.lbl_cur = QtWidgets.QLabel("Tags of selected: " + (", ".join(current_tags) if current_tags else "—"))
         self.lbl_cur.setWordWrap(True)
         lay.addWidget(self.lbl_cur)
         self.ed = QtWidgets.QLineEdit()
-        self.ed.setPlaceholderText("Теги через запятую, например: закат, чистое небо")
+        self.ed.setPlaceholderText("Tags separated by commas, e.g.: sunset, clear sky")
         comp = QtWidgets.QCompleter(all_tags, self.ed)
         comp.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         self.ed.setCompleter(comp)
         lay.addWidget(self.ed)
-        self.rb_add = QtWidgets.QRadioButton("Добавить к существующим")
-        self.rb_rep = QtWidgets.QRadioButton("Заменить все теги")
-        self.rb_rem = QtWidgets.QRadioButton("Убрать эти теги")
+        self.rb_add = QtWidgets.QRadioButton("Add to existing")
+        self.rb_rep = QtWidgets.QRadioButton("Replace all tags")
+        self.rb_rem = QtWidgets.QRadioButton("Remove these tags")
         self.rb_add.setChecked(True)
         for rb in (self.rb_add, self.rb_rep, self.rb_rem):
             lay.addWidget(rb)
@@ -1853,25 +1863,25 @@ class LightDialog(QtWidgets.QDialog):
 
     def __init__(self, parent, n_selected, n_group, group_name, n_all):
         super().__init__(parent)
-        self.setWindowTitle("Определить освещение")
+        self.setWindowTitle("Detect lighting")
         lay = QtWidgets.QVBoxLayout(self)
-        lay.addWidget(QtWidgets.QLabel("Типы: " + ", ".join(LIGHT_CLASSES)))
-        self.rb_sel = QtWidgets.QRadioButton("Выбранные файлы (%d)" % n_selected)
-        self.rb_grp = QtWidgets.QRadioButton("Текущая группа «%s» (%d)" % (group_name, n_group))
-        self.rb_all = QtWidgets.QRadioButton("Вся библиотека (%d)" % n_all)
+        lay.addWidget(QtWidgets.QLabel("Types: " + ", ".join(LIGHT_CLASSES)))
+        self.rb_sel = QtWidgets.QRadioButton("Selected files (%d)" % n_selected)
+        self.rb_grp = QtWidgets.QRadioButton("Current group “%s” (%d)" % (group_name, n_group))
+        self.rb_all = QtWidgets.QRadioButton("Whole library (%d)" % n_all)
         (self.rb_sel if n_selected else self.rb_grp).setChecked(True)
         self.rb_sel.setEnabled(n_selected > 0)
         for rb in (self.rb_sel, self.rb_grp, self.rb_all):
             lay.addWidget(rb)
-        self.chk_name = QtWidgets.QCheckBox("Учитывать название файла (sunset, overcast, утро...)")
+        self.chk_name = QtWidgets.QCheckBox("Use file name (sunset, overcast, morning...)")
         self.chk_name.setChecked(True)
-        self.chk_groups = QtWidgets.QCheckBox("Разложить по группам с такими же названиями")
+        self.chk_groups = QtWidgets.QCheckBox("Sort into groups with matching names")
         self.chk_groups.setChecked(False)
         lay.addWidget(self.chk_name)
         lay.addWidget(self.chk_groups)
-        note = QtWidgets.QLabel("Результат записывается в теги (и в группы, если отмечено). Утро и вечер "
-                                "различаются по цвету света, это оценка; неверные теги можно поправить кнопкой "
-                                "«Теги...». Для файлов без превью оно создаётся сначала (это занимает время).")
+        note = QtWidgets.QLabel("The result is written to tags (and to groups, if checked). Morning and evening "
+                                "are told apart by light color, so this is an estimate; wrong tags can be fixed with the "
+                                "“Tags...” button. Files without a preview get one created first (this takes time).")
         note.setWordWrap(True)
         lay.addWidget(note)
         bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -1931,18 +1941,18 @@ def update_fetch_manifest(timeout=6):
     """Манифест с сайта: {"version", "url", "sha256", "notes"}. Исключение — нет связи или манифест неверный."""
     murl = update_manifest_url()
     if "/OWNER/" in murl:
-        raise RuntimeError("адрес обновлений ещё не настроен (в скрипте стоит заготовка OWNER)")
+        raise RuntimeError("update address is not configured yet (the script still has the OWNER placeholder)")
     with acg_open(murl, timeout) as r:
         d = json.loads(r.read().decode("utf-8-sig"))
     ver = str(d["version"]).strip()
     if not re.fullmatch(r"\d+(\.\d+){1,3}", ver):
-        raise ValueError("неверный номер версии в манифесте: %r" % ver)
+        raise ValueError("invalid version number in manifest: %r" % ver)
     url = urllib.parse.urljoin(murl, str(d.get("file") or "skyrig_studio.py"))
     if urllib.parse.urlparse(url).scheme != urllib.parse.urlparse(murl).scheme:
-        raise ValueError("файл обновления должен лежать по тому же протоколу, что и манифест")
+        raise ValueError("the update file must be served over the same protocol as the manifest")
     sha = str(d.get("sha256", "")).strip().lower()
     if not re.fullmatch(r"[0-9a-f]{64}", sha):
-        raise ValueError("в манифесте нет контрольной суммы sha256")
+        raise ValueError("manifest has no sha256 checksum")
     notes = d.get("notes", "")
     if isinstance(notes, list):
         notes = "\n".join("• " + str(x) for x in notes)
@@ -1954,12 +1964,12 @@ def update_download(man, timeout=30):
     with acg_open(man["url"], timeout) as r:
         data = r.read()
     if hashlib.sha256(data).hexdigest() != man["sha256"]:
-        raise ValueError("контрольная сумма не совпала — файл повреждён или подменён")
+        raise ValueError("checksum mismatch: the file is damaged or has been tampered with")
     text = data.decode("utf-8-sig")
     compile(text, "safe_environment_update.py", "exec")
     m = re.search(r'^VERSION\s*=\s*"([^"]+)"', text, re.M)
     if not m or m.group(1) != man["version"]:
-        raise ValueError("версия внутри файла (%s) не совпадает с манифестом (%s)" % (m.group(1) if m else "?", man["version"]))
+        raise ValueError("version inside the file (%s) does not match the manifest (%s)" % (m.group(1) if m else "?", man["version"]))
     return data
 
 
@@ -2029,8 +2039,8 @@ ACG_UA = "SkyRigStudio/%s (3ds Max script)" % VERSION
 ACG_RES_ORDER = ["1K", "2K", "4K", "8K", "12K", "16K"]
 ACG_THUMB_DIR = os.path.join(DATA_DIR, "acg_thumbs")
 ACG_THUMB_KEY = "256-JPG-242424"
-ACG_SORTS = (("Популярные", "popular"), ("Новые", "latest"),
-             ("Больше скачиваний", "downloads"), ("По алфавиту", "alphabet"))
+ACG_SORTS = (("Popular", "popular"), ("Newest", "latest"),
+             ("Most downloads", "downloads"), ("Alphabetical", "alphabet"))
 
 
 def acg_open(url, timeout=25):
@@ -2045,7 +2055,7 @@ ACG_LIGHT_RULES = (                      # тип освещения по наз
     (LIGHT_NIGHT, ("night", "stars", "moon")),
     (LIGHT_OVERCAST, ("overcast", "cloudy", "storm", "rain", "fog", "foggy")),
 )
-ACG_CATS = ("Все", "Небо", "Окружение", "Интерьер")
+ACG_CATS = ("All", "Sky", "Environment", "Interior")
 
 
 def acg_light_set(a):
@@ -2065,7 +2075,7 @@ def acg_light_set(a):
 def acg_prepare(a):
     """Служебные поля для быстрого поиска и фильтров."""
     t = a["title"].lower()
-    a["_cat"] = "Интерьер" if "indoor" in t else ("Небо" if "sky" in t else "Окружение")
+    a["_cat"] = "Interior" if "indoor" in t else ("Sky" if "sky" in t else "Environment")
     a["_light"] = acg_light_set(a)
     a["_hay"] = (a["title"] + " " + a["id"] + " " + " ".join(a["tags"])).casefold()
     return a
@@ -2197,7 +2207,7 @@ def acg_pick_res(downloads, wanted):
 
 
 def fmt_mb(n):
-    return "%.1f МБ" % (n / 1048576.0) if n < 1024 * 1048576 else "%.2f ГБ" % (n / 1073741824.0)
+    return "%.1f MB" % (n / 1048576.0) if n < 1024 * 1048576 else "%.2f GB" % (n / 1073741824.0)
 
 
 class AmbientCGDialog(QtWidgets.QDialog):
@@ -2206,8 +2216,8 @@ class AmbientCGDialog(QtWidgets.QDialog):
     (каталог, превью, загрузку файла) — так сделан и Poly Haven."""
 
     SITE = ACG_SITE
-    TITLE = "Скачать HDRI с ambientCG"
-    INFO = "Лицензия CC0: можно использовать свободно, в том числе в коммерческих проектах. Источник: ambientcg.com"
+    TITLE = "Download HDRIs from ambientCG"
+    INFO = "CC0 license: free to use, including in commercial projects. Source: ambientcg.com"
     CATS = ACG_CATS
     FOLDER_ATTR, RES_ATTR = "acg_folder", "acg_res"
 
@@ -2245,7 +2255,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         try:
             if not acg_download(url, zpath, prog):
                 return False
-            self.progress.setFormat("%s %s: распаковка..." % (a["title"], res))
+            self.progress.setFormat("%s %s: unpacking..." % (a["title"], res))
             QtWidgets.QApplication.processEvents()
             return acg_extract_exr(zpath, folder)
         finally:
@@ -2294,58 +2304,58 @@ class AmbientCGDialog(QtWidgets.QDialog):
         lay = QtWidgets.QVBoxLayout(self)
         top = QtWidgets.QHBoxLayout()
         self.ed_q = QtWidgets.QLineEdit()
-        self.ed_q.setPlaceholderText("Поиск по названию и тегам (по-английски): sunset, overcast, forest, city...")
+        self.ed_q.setPlaceholderText("Search by name and tags (in English): sunset, overcast, forest, city...")
         self.ed_q.textChanged.connect(self._refill)
         self.cmb_sort = QtWidgets.QComboBox()
-        for title, key in (("Популярные", "pop"), ("Новые", "date"), ("По алфавиту", "title")):
+        for title, key in (("Popular", "pop"), ("Newest", "date"), ("Alphabetical", "title")):
             self.cmb_sort.addItem(title, key)
         self.cmb_sort.currentIndexChanged.connect(self._refill)
         top.addWidget(self.ed_q, 1)
-        top.addWidget(QtWidgets.QLabel("Сортировка"))
+        top.addWidget(QtWidgets.QLabel("Sort by"))
         top.addWidget(self.cmb_sort)
         lay.addLayout(top)
 
         fl = QtWidgets.QHBoxLayout()
-        fl.addWidget(QtWidgets.QLabel("Тип"))
+        fl.addWidget(QtWidgets.QLabel("Type"))
         self.cmb_cat = QtWidgets.QComboBox()
         for c_ in self.CATS:
             self.cmb_cat.addItem(c_)
-        self.cmb_cat.setToolTip("Небо — только небо; Окружение — небо с землёй, городом, лесом; Интерьер — помещения.")
+        self.cmb_cat.setToolTip("Sky: sky only; Environment: sky with ground, city, forest; Interior: indoor spaces.")
         self.cmb_cat.currentIndexChanged.connect(self._refill)
         fl.addWidget(self.cmb_cat)
-        fl.addWidget(QtWidgets.QLabel("Тег сайта"))
+        fl.addWidget(QtWidgets.QLabel("Site tag"))
         self.cmb_tag = QtWidgets.QComboBox()
         self.cmb_tag.setMinimumWidth(110)
         self.cmb_tag.currentIndexChanged.connect(self._refill)
         fl.addWidget(self.cmb_tag)
-        self.chk_hide = QtWidgets.QCheckBox("Скрыть уже скачанные")
+        self.chk_hide = QtWidgets.QCheckBox("Hide already downloaded")
         self.chk_hide.toggled.connect(self._refill)
         fl.addWidget(self.chk_hide)
         fl.addStretch(1)
-        fl.addWidget(QtWidgets.QLabel("Размер"))
+        fl.addWidget(QtWidgets.QLabel("Thumbnail size"))
         self.sl_size = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.sl_size.setRange(80, 230)
         self.sl_size.setValue(max(80, min(230, self.lib.acg_size)))
         self.sl_size.setFixedWidth(130)
         self.sl_size.valueChanged.connect(self._on_size)
         fl.addWidget(self.sl_size)
-        self.b_refresh = QtWidgets.QPushButton("Обновить каталог")
-        self.b_refresh.setToolTip("Заново загрузить список карт с сайта (появятся новые карты).")
+        self.b_refresh = QtWidgets.QPushButton("Refresh catalog")
+        self.b_refresh.setToolTip("Reload the list of maps from the site (new maps will appear).")
         self.b_refresh.clicked.connect(lambda: self._load_catalog(force=True))
         fl.addWidget(self.b_refresh)
         lay.addLayout(fl)
 
         lr = QtWidgets.QHBoxLayout()
-        lr.addWidget(QtWidgets.QLabel("Освещение"))
+        lr.addWidget(QtWidgets.QLabel("Lighting"))
         self.chips = {}
         for cls in LIGHT_CLASSES:
             b = QtWidgets.QPushButton(cls)
             b.setCheckable(True)
-            b.setToolTip("Определено по названию и тегам сайта (приблизительно). Можно отметить несколько.")
+            b.setToolTip("Detected from the title and site tags (approximate). You can select several.")
             b.toggled.connect(self._refill)
             lr.addWidget(b)
             self.chips[cls] = b
-        b_clear = QtWidgets.QPushButton("Сбросить фильтры")
+        b_clear = QtWidgets.QPushButton("Reset filters")
         b_clear.clicked.connect(self._clear_filters)
         lr.addStretch(1)
         lr.addWidget(b_clear)
@@ -2370,26 +2380,26 @@ class AmbientCGDialog(QtWidgets.QDialog):
         self._apply_size()
 
         fr = QtWidgets.QHBoxLayout()
-        fr.addWidget(QtWidgets.QLabel("Папка для карт:"))
+        fr.addWidget(QtWidgets.QLabel("Maps folder:"))
         self.lbl_folder = QtWidgets.QLabel("")
         self.lbl_folder.setStyleSheet("color: #d0d0d0;")
         self.lbl_folder.setWordWrap(True)
-        b_folder = QtWidgets.QPushButton("Выбрать папку...")
+        b_folder = QtWidgets.QPushButton("Choose folder...")
         b_folder.clicked.connect(self._choose_folder)
         fr.addWidget(self.lbl_folder, 1)
         fr.addWidget(b_folder)
         lay.addLayout(fr)
 
         rr = QtWidgets.QHBoxLayout()
-        rr.addWidget(QtWidgets.QLabel("Разрешение:"))
+        rr.addWidget(QtWidgets.QLabel("Resolution:"))
         self.cmb_res = QtWidgets.QComboBox()
         self.cmb_res.setMinimumWidth(80)
         self.cmb_res.currentIndexChanged.connect(self._on_res)
         rr.addWidget(self.cmb_res)
-        self.lbl_sel = QtWidgets.QLabel("Выберите карты в списке (двойной клик — большое превью).")
+        self.lbl_sel = QtWidgets.QLabel("Select maps in the list (double-click for a large preview).")
         self.lbl_sel.setWordWrap(True)
         rr.addWidget(self.lbl_sel, 1)
-        self.b_dl = QtWidgets.QPushButton("Скачать выбранные")
+        self.b_dl = QtWidgets.QPushButton("Download selected")
         self.b_dl.setMinimumHeight(30)
         self.b_dl.setEnabled(False)
         self.b_dl.clicked.connect(self._download)
@@ -2402,10 +2412,10 @@ class AmbientCGDialog(QtWidgets.QDialog):
         self.progress.setTextVisible(True)
         self.progress.setAlignment(QtCore.Qt.AlignCenter)
         self.progress.setFormat("")
-        self.b_cancel = QtWidgets.QPushButton("Отмена")
+        self.b_cancel = QtWidgets.QPushButton("Cancel")
         self.b_cancel.setEnabled(False)
         self.b_cancel.clicked.connect(self._on_cancel)
-        b_close = QtWidgets.QPushButton("Закрыть")
+        b_close = QtWidgets.QPushButton("Close")
         b_close.clicked.connect(self.accept)
         pr.addWidget(self.progress, 1)
         pr.addWidget(self.b_cancel)
@@ -2437,12 +2447,12 @@ class AmbientCGDialog(QtWidgets.QDialog):
     # ---------- папка ----------
     def _show_folder(self):
         f = self.folder
-        self.lbl_folder.setText(f if f else "не выбрана (будет запрошена при скачивании)")
+        self.lbl_folder.setText(f if f else "not set (will be asked on download)")
 
     def _choose_folder(self):
         start = self.folder if self.folder and os.path.isdir(self.folder) \
             else os.path.expanduser("~")
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Папка для скачанных HDRI", start)
+        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Folder for downloaded HDRIs", start)
         if not d:
             return False
         self.folder = norm_path(d)
@@ -2462,7 +2472,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         if not items:
             self._busy = True
             self.setCursor(QtCore.Qt.WaitCursor)
-            self._info("Загрузка каталога с %s..." % self.SITE)
+            self._info("Loading catalog from %s..." % self.SITE)
             QtWidgets.QApplication.processEvents()
             try:
                 items = self._fetch()
@@ -2472,14 +2482,14 @@ class AmbientCGDialog(QtWidgets.QDialog):
                     except Exception:
                         print("[SkyRig Studio] catalog save error:\n" + traceback.format_exc())
                     ts = time.time()
-                    note = "Каталог обновлён. "
+                    note = "Catalog updated. "
             except Exception as ex:
                 old, ts = self._cached()
                 if old:
                     items = old
-                    note = "Нет связи с сайтом (%s), показан сохранённый каталог. " % ex
+                    note = "No connection to the site (%s), showing the saved catalog. " % ex
                 else:
-                    self._info("Не удалось загрузить каталог с %s: %s. Проверьте подключение к интернету." % (self.SITE, ex),
+                    self._info("Could not load the catalog from %s: %s. Check your internet connection." % (self.SITE, ex),
                                error=True)
             finally:
                 self.unsetCursor()
@@ -2497,7 +2507,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         cur = self.cmb_tag.currentData()
         self.cmb_tag.blockSignals(True)
         self.cmb_tag.clear()
-        self.cmb_tag.addItem("любой", "")
+        self.cmb_tag.addItem("any", "")
         for t, n in sorted(((t, n) for t, n in counts.items() if n >= 6), key=lambda x: -x[1]):
             self.cmb_tag.addItem("%s (%d)" % (t, n), t)
         i = self.cmb_tag.findData(cur or "")
@@ -2506,8 +2516,8 @@ class AmbientCGDialog(QtWidgets.QDialog):
         self._refill()
         if self._catalog:
             when = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts)) if ts else "—"
-            self._info("%sКаталог от %s: карт %d. Выберите по превью (Ctrl/Shift — несколько), затем разрешение "
-                       "и «Скачать выбранные»." % (note, when, len(self._catalog)))
+            self._info("%sCatalog from %s: %d maps. Pick by preview (Ctrl/Shift for several), then a resolution "
+                       "and “Download selected”." % (note, when, len(self._catalog)))
 
     def _have_ids(self):
         have = set()
@@ -2518,7 +2528,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         return have
 
     def _passes(self, a, words, cat, tag, lights):
-        if cat != "Все" and a["_cat"] != cat:
+        if cat != "All" and a["_cat"] != cat:
             return False
         if tag and tag not in [t.lower() for t in a["tags"]]:
             return False
@@ -2554,15 +2564,15 @@ class AmbientCGDialog(QtWidgets.QDialog):
             it.setData(QtCore.Qt.UserRole, a["id"])
             it.setIcon(self._icons.get(a["id"]) or self._ph_icon())
             levels = self._levels(a)
-            it.setToolTip("%s\nТеги: %s\nРазрешения: %s%s" % (
-                a["title"], ", ".join(a["tags"]) or "—", ", ".join(levels), "\nУже в библиотеке" if have else ""))
+            it.setToolTip("%s\nTags: %s\nResolutions: %s%s" % (
+                a["title"], ", ".join(a["tags"]) or "—", ", ".join(levels), "\nAlready in the library" if have else ""))
             if have:
                 it.setForeground(QtGui.QBrush(QtGui.QColor(130, 210, 130)))
             self.lst.addItem(it)
             if a["id"] in selected:
                 it.setSelected(True)
         self.lst.setUpdatesEnabled(True)
-        self.lbl_page.setText("Показано карт: %d из %d" % (len(res), len(self._catalog)))
+        self.lbl_page.setText("Maps shown: %d of %d" % (len(res), len(self._catalog)))
         self._on_selection()
         self._load_visible()
 
@@ -2646,7 +2656,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         try:
             data = self._thumb(a, True)
         except Exception as ex:
-            self._info("Не удалось загрузить большое превью: %s" % ex, error=True)
+            self._info("Could not load the large preview: %s" % ex, error=True)
             return
         pm = QtGui.QPixmap()
         if not data or not pm.loadFromData(data):
@@ -2657,7 +2667,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         lb = QtWidgets.QLabel()
         lb.setPixmap(pm)
         v.addWidget(lb)
-        v.addWidget(QtWidgets.QLabel("Теги: " + (", ".join(a["tags"]) or "—")))
+        v.addWidget(QtWidgets.QLabel("Tags: " + (", ".join(a["tags"]) or "—")))
         dlg.exec()
 
     # ---------- выбор и разрешение ----------
@@ -2690,10 +2700,10 @@ class AmbientCGDialog(QtWidgets.QDialog):
         sel = self._selected()
         self.b_dl.setEnabled(bool(sel) and not self._busy)
         if not sel:
-            self.lbl_sel.setText("Выберите карты в списке (двойной клик — большое превью).")
+            self.lbl_sel.setText("Select maps in the list (double-click for a large preview).")
             return
         if not res:
-            self.lbl_sel.setText("Выбрано карт: %d." % len(sel))
+            self.lbl_sel.setText("Maps selected: %d." % len(sel))
             return
         self.res_pref = res
         total, lower, unknown = 0, [], False
@@ -2705,12 +2715,12 @@ class AmbientCGDialog(QtWidgets.QDialog):
                 unknown = unknown or not sz
                 if use != res and res != "MAX":
                     lower.append("%s — %s" % (a["title"], use))
-        txt = "Выбрано карт: %d%s." % (len(sel), ", размер уточнится при скачивании" if unknown
-                                       else ", около %s" % fmt_mb(total))
+        txt = "Maps selected: %d%s." % (len(sel), ", size will be determined on download" if unknown
+                                       else ", about %s" % fmt_mb(total))
         if lower:
-            txt += " Нет %s у: %s." % (res, "; ".join(lower))
+            txt += " No %s for: %s." % (res, "; ".join(lower))
         if res in ("12K", "16K", "24K", "MAX"):
-            txt += " Большое разрешение: создание превью займёт время и много памяти."
+            txt += " High resolution: creating the preview will take time and a lot of memory."
         self.lbl_sel.setText(txt)
 
     # ---------- загрузка ----------
@@ -2731,7 +2741,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         plan = self._plan()
         if not plan:
             if self._plan_failed:
-                self._info("Не удалось получить ссылки: %s" % ", ".join(self._plan_failed), error=True)
+                self._info("Could not get download links: %s" % ", ".join(self._plan_failed), error=True)
             return
         folder = self.folder
         if not folder or not os.path.isdir(folder):
@@ -2741,7 +2751,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
         total = sum(p[3] for p in plan)
         if total > 400 * 1048576:
             r = QtWidgets.QMessageBox.question(
-                self, "Скачать выбранные", "Всего будет скачано около %s (карт: %d). Продолжить?" % (fmt_mb(total), len(plan)))
+                self, "Download selected", "In total about %s will be downloaded (maps: %d). Continue?" % (fmt_mb(total), len(plan)))
             if r != QtWidgets.QMessageBox.Yes:
                 return
         self._busy, self._cancel = True, False
@@ -2753,7 +2763,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
             for n, (a, res, url, size) in enumerate(plan, 1):
                 if self._cancel:
                     break
-                label = "%s %s (%d из %d)" % (a["title"], res, n, len(plan))
+                label = "%s %s (%d of %d)" % (a["title"], res, n, len(plan))
                 existing = self._existing(a, res, folder)
                 path = None
                 if os.path.isfile(existing):
@@ -2763,7 +2773,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
                     def prog(done, tot, label=label, size=size):
                         t = tot or size or 1
                         self.progress.setValue(int(min(100, done * 100 / t)))
-                        self.progress.setFormat("%s: %s из %s" % (label, fmt_mb(done), fmt_mb(t)))
+                        self.progress.setFormat("%s: %s of %s" % (label, fmt_mb(done), fmt_mb(t)))
                         QtWidgets.QApplication.processEvents()
                         return not self._cancel
 
@@ -2777,7 +2787,7 @@ class AmbientCGDialog(QtWidgets.QDialog):
                 if not path:
                     failed.append(a["title"])
                     continue
-                self.progress.setFormat("%s: добавление в библиотеку..." % label)
+                self.progress.setFormat("%s: adding to the library..." % label)
                 QtWidgets.QApplication.processEvents()
                 self._register(path, res)
                 done_files.append(a["title"])
@@ -2791,14 +2801,14 @@ class AmbientCGDialog(QtWidgets.QDialog):
             self.lib.save()
         except Exception:
             print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
-        msg = "Скачано и добавлено в группу «%s»: %d" % (self.SITE, len(done_files))
+        msg = "Downloaded and added to group “%s”: %d" % (self.SITE, len(done_files))
         if skipped:
-            msg += " (уже были на диске: %d)" % len(skipped)
+            msg += " (already on disk: %d)" % len(skipped)
         if failed:
-            msg += ". Не удалось: %s" % ", ".join(failed)
+            msg += ". Failed: %s" % ", ".join(failed)
         if self._cancel:
-            msg += ". Прервано."
-        self.progress.setFormat(msg if len(msg) < 90 else "Готово: %d" % len(done_files))
+            msg += ". Interrupted."
+        self.progress.setFormat(msg if len(msg) < 90 else "Done: %d" % len(done_files))
         self._info(msg, error=bool(failed))
         self._refill()                                   # метки «✓ уже скачано»
         if self.on_changed:
@@ -2833,7 +2843,7 @@ PH_SITE = "Poly Haven"
 PH_API = "https://api.polyhaven.com"
 PH_THUMB_DIR = os.path.join(DATA_DIR, "ph_thumbs")
 PH_CATALOG_FILE = os.path.join(DATA_DIR, "ph_catalog.json")
-PH_CATS = ("Все", "Небо", "Природа", "Город", "Интерьер", "Студия")
+PH_CATS = ("All", "Sky", "Nature", "City", "Interior", "Studio")
 PH_STD_K = (1, 2, 4, 8, 16, 24)
 
 
@@ -2876,17 +2886,17 @@ def ph_parse(d):
                     allt.append(t)
             cl = [x.lower() for x in cats]
             if "studio" in cl:
-                cat = "Студия"
+                cat = "Studio"
             elif "indoor" in cl or (v.get("attributes") or {}).get("environment") == "indoor":
-                cat = "Интерьер"
+                cat = "Interior"
             elif "pure skies" in cl:
-                cat = "Небо"
+                cat = "Sky"
             elif "urban" in cl:
-                cat = "Город"
+                cat = "City"
             elif "nature" in cl:
-                cat = "Природа"
+                cat = "Nature"
             else:
-                cat = "Окружение"
+                cat = "Environment"
             mr = v.get("max_resolution") or [1024, 512]
             out.append({"id": str(aid), "title": str(v.get("name") or aid), "tags": allt,
                         "levels": ph_levels(int(mr[0])), "date": "%012d" % int(v.get("date_published") or 0),
@@ -2985,8 +2995,8 @@ class PolyHavenDialog(AmbientCGDialog):
     """Каталог Poly Haven (CC0): тот же интерфейс, что у ambientCG. Скачанные карты попадают в группу «Poly Haven»."""
 
     SITE = PH_SITE
-    TITLE = "Скачать HDRI с Poly Haven"
-    INFO = "Лицензия CC0: можно использовать свободно, в том числе в коммерческих проектах. Источник: polyhaven.com"
+    TITLE = "Download HDRIs from Poly Haven"
+    INFO = "CC0 license: free to use, including in commercial projects. Source: polyhaven.com"
     CATS = PH_CATS
     FOLDER_ATTR, RES_ATTR = "ph_folder", "ph_res"
 
@@ -2994,10 +3004,10 @@ class PolyHavenDialog(AmbientCGDialog):
         super().__init__(parent, library, on_changed)
         self._files_cache = {}
         row = QtWidgets.QHBoxLayout()
-        row.addWidget(QtWidgets.QLabel("Формат файла:"))
+        row.addWidget(QtWidgets.QLabel("File format:"))
         self.cmb_fmt = QtWidgets.QComboBox()
-        self.cmb_fmt.addItem("HDR (Radiance) — файлы в 3-4 раза меньше", "hdr")
-        self.cmb_fmt.addItem("EXR — без потерь точности, файлы больше", "exr")
+        self.cmb_fmt.addItem("HDR (Radiance): files are 3-4 times smaller", "hdr")
+        self.cmb_fmt.addItem("EXR: no precision loss, larger files", "exr")
         self.cmb_fmt.setCurrentIndex(max(0, self.cmb_fmt.findData(self.lib.ph_fmt)))
         self.cmb_fmt.currentIndexChanged.connect(self._on_fmt)
         row.addWidget(self.cmb_fmt)
@@ -3072,7 +3082,7 @@ class PolyHavenDialog(AmbientCGDialog):
         fmt = self.cmb_fmt.currentData() or "hdr"
         need = [a for a in sel if a["id"] not in self._files_cache]
         if need:
-            self._info("Получение ссылок на файлы...")
+            self._info("Getting file links...")
             self.setCursor(QtCore.Qt.WaitCursor)
             QtWidgets.QApplication.processEvents()
 
@@ -3114,10 +3124,10 @@ class PolyHavenDialog(AmbientCGDialog):
         try:
             if not acg_download(url, tmp, prog):
                 return False
-            self.progress.setFormat("%s %s: проверка файла..." % (a["title"], res))
+            self.progress.setFormat("%s %s: checking file..." % (a["title"], res))
             QtWidgets.QApplication.processEvents()
             if not ph_magic_ok(tmp, ext) or (md5 and ph_md5(tmp) != md5):
-                print("[SkyRig Studio] Poly Haven: файл %s повреждён (не сошлась контрольная сумма)" % a["id"])
+                print("[SkyRig Studio] Poly Haven: file %s is damaged (checksum mismatch)" % a["id"])
                 return None
             os.replace(tmp, dst)
             return dst
@@ -3135,7 +3145,7 @@ class LibraryDialog(QtWidgets.QDialog):
     def __init__(self, parent, library, apply_cb, current_path=""):
         super().__init__(parent)
         self.setObjectName(LIBRARY_OBJ_NAME)
-        self.setWindowTitle("Библиотека HDRI")
+        self.setWindowTitle("HDRI Library")
         self.resize(980, 640)
         self.lib = library
         self.apply_cb = apply_cb
@@ -3152,17 +3162,17 @@ class LibraryDialog(QtWidgets.QDialog):
         root = QtWidgets.QHBoxLayout(self)
 
         left = QtWidgets.QVBoxLayout()
-        left.addWidget(QtWidgets.QLabel("Группы"))
+        left.addWidget(QtWidgets.QLabel("Groups"))
         self.lst_groups = QtWidgets.QListWidget()
         self.lst_groups.setMinimumWidth(190)
         self.lst_groups.currentItemChanged.connect(self._on_group_changed)
         left.addWidget(self.lst_groups, 1)
         row = QtWidgets.QHBoxLayout()
-        b_new = QtWidgets.QPushButton("Создать")
+        b_new = QtWidgets.QPushButton("Create")
         b_new.clicked.connect(self._new_group)
-        b_ren = QtWidgets.QPushButton("Переименовать")
+        b_ren = QtWidgets.QPushButton("Rename")
         b_ren.clicked.connect(self._rename_group)
-        b_del = QtWidgets.QPushButton("Удалить")
+        b_del = QtWidgets.QPushButton("Delete")
         b_del.clicked.connect(self._delete_group)
         row.addWidget(b_new)
         row.addWidget(b_ren)
@@ -3172,14 +3182,14 @@ class LibraryDialog(QtWidgets.QDialog):
 
         right = QtWidgets.QVBoxLayout()
         self.ed_search = QtWidgets.QLineEdit()
-        self.ed_search.setPlaceholderText("Поиск по имени файла и тегам...")
+        self.ed_search.setPlaceholderText("Search by file name and tags...")
         self.ed_search.setClearButtonEnabled(True)
         self.ed_search.textChanged.connect(self._fill_files)
         row_s = QtWidgets.QHBoxLayout()
         row_s.addWidget(self.ed_search, 1)
         self.cmb_tag = QtWidgets.QComboBox()
         self.cmb_tag.setMinimumWidth(150)
-        self.cmb_tag.setToolTip("Фильтр по тегу")
+        self.cmb_tag.setToolTip("Filter by tag")
         self.cmb_tag.currentIndexChanged.connect(self._fill_files)
         row_s.addWidget(self.cmb_tag)
         right.addLayout(row_s)
@@ -3198,40 +3208,40 @@ class LibraryDialog(QtWidgets.QDialog):
         right.addWidget(self.lst_files, 1)
 
         row = QtWidgets.QHBoxLayout()
-        b_addf = QtWidgets.QPushButton("Добавить файлы...")
+        b_addf = QtWidgets.QPushButton("Add files...")
         b_addf.clicked.connect(self._add_files)
-        b_addd = QtWidgets.QPushButton("Добавить папку...")
+        b_addd = QtWidgets.QPushButton("Add folder...")
         b_addd.clicked.connect(self._add_folder)
-        b_rem = QtWidgets.QPushButton("Убрать из группы")
-        b_rem.setToolTip("Файл на диске НЕ удаляется — он только исчезает из этой группы.")
+        b_rem = QtWidgets.QPushButton("Remove from group")
+        b_rem.setToolTip("The file on disk is NOT deleted; it only disappears from this group.")
         b_rem.clicked.connect(self._remove_files)
-        b_copy = QtWidgets.QPushButton("Добавить в группу...")
+        b_copy = QtWidgets.QPushButton("Add to group...")
         b_copy.clicked.connect(self._copy_to_group)
-        b_tags = QtWidgets.QPushButton("Теги...")
-        b_tags.setToolTip("Добавить, заменить или убрать теги у выбранных файлов.")
+        b_tags = QtWidgets.QPushButton("Tags...")
+        b_tags.setToolTip("Add, replace or remove tags on the selected files.")
         b_tags.clicked.connect(self._edit_tags)
-        b_acg = QtWidgets.QPushButton("Скачать с ambientCG...")
-        b_acg.setToolTip("Каталог бесплатных HDRI (CC0): выбор по превью, разрешение, папка. "
-                         "Скачанные карты попадают в группу «ambientCG» с тегами освещения и разрешения.")
+        b_acg = QtWidgets.QPushButton("Download from ambientCG...")
+        b_acg.setToolTip("Catalog of free HDRIs (CC0): pick by preview, resolution, folder. "
+                         "Downloaded maps go to the “ambientCG” group with lighting and resolution tags.")
         b_acg.clicked.connect(self._open_acg)
-        b_ph = QtWidgets.QPushButton("Скачать с Poly Haven...")
-        b_ph.setToolTip("Каталог бесплатных HDRI Poly Haven (CC0): выбор по превью, разрешение до 24K, формат HDR/EXR, папка. "
-                        "Скачанные карты попадают в группу «Poly Haven» с тегами освещения и разрешения.")
+        b_ph = QtWidgets.QPushButton("Download from Poly Haven...")
+        b_ph.setToolTip("Catalog of free Poly Haven HDRIs (CC0): pick by preview, resolution up to 24K, HDR/EXR format, folder. "
+                        "Downloaded maps go to the “Poly Haven” group with lighting and resolution tags.")
         b_ph.clicked.connect(self._open_ph)
         for b in (b_addf, b_addd, b_rem, b_copy, b_tags, b_acg, b_ph):
             row.addWidget(b)
         right.addLayout(row)
 
         row = QtWidgets.QHBoxLayout()
-        b_exp = QtWidgets.QPushButton("Сохранить библиотеку в файл...")
-        b_exp.setToolTip("Записывает все группы и пути к HDRI в один файл, чтобы перенести библиотеку "
-                         "на другой компьютер. Сами HDRI и превью не копируются.")
+        b_exp = QtWidgets.QPushButton("Save library to file...")
+        b_exp.setToolTip("Writes all groups and HDRI paths to one file so the library can be moved "
+                         "to another computer. The HDRIs and previews themselves are not copied.")
         b_exp.clicked.connect(self._export_library)
-        b_imp = QtWidgets.QPushButton("Загрузить библиотеку из файла...")
-        b_imp.setToolTip("Загружает группы и пути из резервного файла (пути должны совпадать с этим компьютером).")
+        b_imp = QtWidgets.QPushButton("Load library from file...")
+        b_imp.setToolTip("Loads groups and paths from a backup file (paths must match this computer).")
         b_imp.clicked.connect(self._import_library)
-        b_light = QtWidgets.QPushButton("Определить освещение...")
-        b_light.setToolTip("Автоматически помечает HDRI: утро, полдень, после обеда, вечер, ночь, пасмурное небо.")
+        b_light = QtWidgets.QPushButton("Detect lighting...")
+        b_light.setToolTip("Automatically tags HDRIs: morning, noon, afternoon, evening, night, overcast.")
         b_light.clicked.connect(self._detect_light)
         row.addWidget(b_exp)
         row.addWidget(b_imp)
@@ -3239,20 +3249,20 @@ class LibraryDialog(QtWidgets.QDialog):
         right.addLayout(row)
 
         row = QtWidgets.QHBoxLayout()
-        b_norm = QtWidgets.QPushButton("Выровнять яркость")
-        b_norm.setToolTip("Измеряет, сколько света даёт каждая HDRI библиотеки, и считает поправку экспозиции "
-                          "относительно эталона. После этого при выборе карты Exposure ставится сам.")
+        b_norm = QtWidgets.QPushButton("Balance brightness")
+        b_norm.setToolTip("Measures how much light each HDRI in the library gives and calculates an exposure correction "
+                          "relative to the reference. After that, Exposure is set automatically when you pick a map.")
         b_norm.clicked.connect(self._equalize)
-        b_norm0 = QtWidgets.QPushButton("Сбросить яркость")
-        b_norm0.setToolTip("Выключает выравнивание: Exposure возвращается к 0 (у текущей карты и дальше "
-                           "при выборе карт). Измерения сохраняются.")
+        b_norm0 = QtWidgets.QPushButton("Reset brightness")
+        b_norm0.setToolTip("Turns balancing off: Exposure returns to 0 (for the current map and for maps picked "
+                           "later). Measurements are kept.")
         b_norm0.clicked.connect(self._reset_norm)
-        b_ref = QtWidgets.QPushButton("Эталон = выбранная")
-        b_ref.setToolTip("Сделать эталоном выделенную в списке карту (поправки пересчитываются сразу).")
+        b_ref = QtWidgets.QPushButton("Reference = selected")
+        b_ref.setToolTip("Make the map selected in the list the reference (corrections are recalculated immediately).")
         b_ref.clicked.connect(self._set_reference)
-        self.chk_norm_sun = QtWidgets.QCheckBox("Учитывать солнце на карте")
-        self.chk_norm_sun.setToolTip("Выключено: яркость считается по небу, без диска солнца (солнце вы ставите "
-                                     "отдельно Corona Sun). Включено: считается всё, что есть на карте.")
+        self.chk_norm_sun = QtWidgets.QCheckBox("Include the sun on the map")
+        self.chk_norm_sun.setToolTip("Off: brightness is measured from the sky, without the sun disc (you place the sun "
+                                     "separately with Corona Sun). On: everything on the map is counted.")
         self.chk_norm_sun.setChecked(self.lib.norm_sun)
         self.chk_norm_sun.toggled.connect(self._on_norm_sun)
         for wdg in (b_norm, b_norm0, b_ref, self.chk_norm_sun):
@@ -3264,15 +3274,15 @@ class LibraryDialog(QtWidgets.QDialog):
         self._update_norm_label()
 
         row = QtWidgets.QHBoxLayout()
-        self.b_thumbs = QtWidgets.QPushButton("Создать превью")
-        self.b_thumbs.setToolTip("Создаёт недостающие миниатюры (один раз; затем берутся из кэша).")
+        self.b_thumbs = QtWidgets.QPushButton("Create previews")
+        self.b_thumbs.setToolTip("Creates missing thumbnails (once; afterwards they come from the cache).")
         self.b_thumbs.clicked.connect(self._make_missing_thumbs)
         self.progress = QtWidgets.QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setTextVisible(True)
         self.progress.setAlignment(QtCore.Qt.AlignCenter)
         self.progress.setFormat("")
-        self.b_cancel = QtWidgets.QPushButton("Отмена")
+        self.b_cancel = QtWidgets.QPushButton("Cancel")
         self.b_cancel.setEnabled(False)
         self.b_cancel.clicked.connect(self._on_cancel)
         row.addWidget(self.b_thumbs)
@@ -3281,13 +3291,13 @@ class LibraryDialog(QtWidgets.QDialog):
         right.addLayout(row)
 
         row = QtWidgets.QHBoxLayout()
-        self.b_delthumbs = QtWidgets.QPushButton("Удалить превью выбранных")
-        self.b_delthumbs.setToolTip("Удаляет только кэш превью выбранных файлов. "
-                                    "Файлы HDRI на диске и их место в группах не затрагиваются.")
+        self.b_delthumbs = QtWidgets.QPushButton("Delete selected previews")
+        self.b_delthumbs.setToolTip("Deletes only the preview cache of the selected files. "
+                                    "HDRI files on disk and their place in groups are not affected.")
         self.b_delthumbs.clicked.connect(self._delete_thumbs)
         row.addWidget(self.b_delthumbs)
         row.addSpacing(12)
-        row.addWidget(QtWidgets.QLabel("Экспозиция превью"))
+        row.addWidget(QtWidgets.QLabel("Preview exposure"))
         self.sl_ev = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         steps = int(THUMB_EV_RANGE * 4)
         self.sl_ev.setRange(-steps, steps)                       # шаг 0.25 EV
@@ -3299,7 +3309,7 @@ class LibraryDialog(QtWidgets.QDialog):
         self.lbl_ev.setMinimumWidth(64)
         b_ev0 = QtWidgets.QPushButton("0")
         b_ev0.setMaximumWidth(28)
-        b_ev0.setToolTip("Сбросить экспозицию превью")
+        b_ev0.setToolTip("Reset preview exposure")
         b_ev0.clicked.connect(lambda: self.sl_ev.setValue(0))
         row.addWidget(self.sl_ev, 1)
         row.addWidget(self.lbl_ev)
@@ -3309,10 +3319,10 @@ class LibraryDialog(QtWidgets.QDialog):
         row = QtWidgets.QHBoxLayout()
         self.lbl_info = QtWidgets.QLabel("")
         self.lbl_info.setWordWrap(True)
-        b_apply = QtWidgets.QPushButton("Применить выбранный")
+        b_apply = QtWidgets.QPushButton("Apply selected")
         b_apply.setMinimumHeight(30)
         b_apply.clicked.connect(self._apply)
-        b_close = QtWidgets.QPushButton("Закрыть")
+        b_close = QtWidgets.QPushButton("Close")
         b_close.setMinimumHeight(30)
         b_close.clicked.connect(self.accept)
         row.addWidget(self.lbl_info, 1)
@@ -3330,7 +3340,7 @@ class LibraryDialog(QtWidgets.QDialog):
             self.lib.save()
         except Exception:
             print("[SkyRig Studio] library save error:\n" + traceback.format_exc())
-            self._info("Не удалось сохранить библиотеку (см. Listener).", error=True)
+            self._info("Could not save the library (see Listener).", error=True)
 
     # ---------- группы ----------
     def _current_group(self):
@@ -3357,7 +3367,7 @@ class LibraryDialog(QtWidgets.QDialog):
         self._fill_files()
 
     def _new_group(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Новая группа", "Название группы:")
+        name, ok = QtWidgets.QInputDialog.getText(self, "New group", "Group name:")
         if ok and name.strip():
             final = self.lib.add_group(name)
             self._save()
@@ -3366,24 +3376,24 @@ class LibraryDialog(QtWidgets.QDialog):
     def _rename_group(self):
         g = self._current_group()
         if g == ALL_GROUP:
-            self._info("Группу «%s» переименовать нельзя." % ALL_GROUP)
+            self._info("Group “%s” cannot be renamed." % ALL_GROUP)
             return
-        name, ok = QtWidgets.QInputDialog.getText(self, "Переименовать группу", "Новое название:", text=g)
+        name, ok = QtWidgets.QInputDialog.getText(self, "Rename group", "New name:", text=g)
         if ok and name.strip():
             if self.lib.rename_group(g, name.strip()):
                 self._save()
                 self._fill_groups(select=name.strip())
             else:
-                self._info("Такое название недопустимо или уже занято.", error=True)
+                self._info("This name is invalid or already taken.", error=True)
 
     def _delete_group(self):
         g = self._current_group()
         if g == ALL_GROUP:
-            self._info("Группу «%s» удалить нельзя." % ALL_GROUP)
+            self._info("Group “%s” cannot be deleted." % ALL_GROUP)
             return
         r = QtWidgets.QMessageBox.question(
-            self, "Удалить группу",
-            "Удалить группу «%s»?\nФайлы HDRI на диске не удаляются." % g)
+            self, "Delete group",
+            "Delete group “%s”?\nHDRI files on disk are not deleted." % g)
         if r == QtWidgets.QMessageBox.Yes:
             self.lib.delete_group(g)
             self.lib.last_group = ""
@@ -3392,15 +3402,15 @@ class LibraryDialog(QtWidgets.QDialog):
 
     def _ask_group(self, title, allow_new=True):
         names = self.lib.names()
-        NEW = "+ Новая группа..."
+        NEW = "+ New group..."
         items = names + ([NEW] if allow_new else [])
         if not items:
             return None
-        choice, ok = QtWidgets.QInputDialog.getItem(self, title, "Группа:", items, 0, False)
+        choice, ok = QtWidgets.QInputDialog.getItem(self, title, "Group:", items, 0, False)
         if not ok:
             return None
         if choice == NEW:
-            name, ok2 = QtWidgets.QInputDialog.getText(self, "Новая группа", "Название группы:")
+            name, ok2 = QtWidgets.QInputDialog.getText(self, "New group", "Group name:")
             if not ok2 or not name.strip():
                 return None
             choice = self.lib.add_group(name)
@@ -3411,7 +3421,7 @@ class LibraryDialog(QtWidgets.QDialog):
         cur = self.cmb_tag.currentData() if self.cmb_tag.count() else ""
         self.cmb_tag.blockSignals(True)
         self.cmb_tag.clear()
-        self.cmb_tag.addItem("Все теги", "")
+        self.cmb_tag.addItem("All tags", "")
         for t in self.lib.all_tags():
             self.cmb_tag.addItem(t, t)
         i = self.cmb_tag.findData(cur) if cur else 0
@@ -3421,7 +3431,7 @@ class LibraryDialog(QtWidgets.QDialog):
     def _edit_tags(self):
         paths = self._selected_paths()
         if not paths:
-            self._info("Выберите файлы для тегов.")
+            self._info("Select files to tag.")
             return
         cur = []
         for p in paths:
@@ -3438,7 +3448,7 @@ class LibraryDialog(QtWidgets.QDialog):
         self._save()
         self._fill_tag_filter()
         self._fill_files()
-        self._info("Теги обновлены у файлов: %d." % len(paths))
+        self._info("Tags updated on files: %d." % len(paths))
 
     def _fill_files(self, *_):
         q = self.ed_search.text().strip().lower()
@@ -3469,20 +3479,20 @@ class LibraryDialog(QtWidgets.QDialog):
             if not exists:
                 missing += 1
                 it.setForeground(QtGui.QBrush(QtGui.QColor("#ff7070")))
-                it.setToolTip("Файл не найден:\n" + p)
+                it.setToolTip("File not found:\n" + p)
             else:
-                it.setToolTip(p + ("\nТеги: " + ", ".join(ptags) if ptags else ""))
+                it.setToolTip(p + ("\nTags: " + ", ".join(ptags) if ptags else ""))
             if path_key(p) == path_key(self.current_path or ""):
                 f = it.font()
                 f.setBold(True)
                 it.setFont(f)
             self.lst_files.addItem(it)
         self.lst_files.setUpdatesEnabled(True)
-        msg = "Файлов: %d" % len(files)
+        msg = "Files: %d" % len(files)
         if no_thumb:
-            msg += ", без превью: %d" % no_thumb
+            msg += ", without preview: %d" % no_thumb
         if missing:
-            msg += ", не найдено на диске: %d" % missing
+            msg += ", not found on disk: %d" % missing
         self._info(msg)
 
     def _selected_paths(self):
@@ -3492,28 +3502,28 @@ class LibraryDialog(QtWidgets.QDialog):
         g = self._current_group()
         if g != ALL_GROUP:
             return g
-        return self._ask_group("В какую группу добавить?")
+        return self._ask_group("Which group should they be added to?")
 
     def _add_files(self):
         g = self._target_group_for_add()
         if not g:
             return
         files, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self, "Добавить HDRI / EXR", "", "HDRI (*.hdr *.exr);;Все файлы (*.*)")
+            self, "Add HDRI / EXR", "", "HDRI (*.hdr *.exr);;All files (*.*)")
         if files:
             n = self.lib.add_files(g, files)
             self._save()
             self._fill_groups(select=g)
-            self._info("Добавлено: %d. Создаю превью..." % n)
+            self._info("Added: %d. Creating previews..." % n)
             self._make_missing_thumbs(only=files)
 
     def _export_library(self):
         if not self.lib.groups:
-            self._info("Библиотека пуста — сохранять нечего.", error=True)
+            self._info("The library is empty: nothing to save.", error=True)
             return
         default = os.path.join(os.path.expanduser("~"), "SkyRigStudio_library.json")
         path, _f = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Сохранить библиотеку HDRI", default, "Библиотека SkyRig Studio (*.json)")
+            self, "Save HDRI library", default, "SkyRig Studio library (*.json)")
         if not path:
             return
         if not path.lower().endswith(".json"):
@@ -3522,32 +3532,32 @@ class LibraryDialog(QtWidgets.QDialog):
             self.lib.export_to(path)
         except Exception:
             print("[SkyRig Studio] library export error:\n" + traceback.format_exc())
-            self._info("Не удалось сохранить файл (см. Listener).", error=True)
+            self._info("Could not save the file (see Listener).", error=True)
             return
         total = len(self.lib.files_of(ALL_GROUP))
-        self._info("Библиотека сохранена: групп %d, файлов %d.\n%s" % (len(self.lib.groups), total, path))
+        self._info("Library saved: groups %d, files %d.\n%s" % (len(self.lib.groups), total, path))
 
     def _import_library(self):
         path, _f = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Загрузить библиотеку HDRI", os.path.expanduser("~"), "Библиотека SkyRig Studio (*.json)")
+            self, "Load HDRI library", os.path.expanduser("~"), "SkyRig Studio library (*.json)")
         if not path:
             return
         try:
             groups, tags = Library.read_backup(path)
         except ValueError as ex:
-            self._info("Не загружено: %s." % ex, error=True)
+            self._info("Not loaded: %s." % ex, error=True)
             return
         if not groups:
-            self._info("В файле нет ни одной группы.", error=True)
+            self._info("The file contains no groups.", error=True)
             return
         n_files = len({path_key(f) for g in groups for f in g["files"]})
         box = QtWidgets.QMessageBox(self)
-        box.setWindowTitle("Загрузить библиотеку")
-        box.setText("В файле: групп %d, файлов %d.\n\nОбъединить с текущей библиотекой или заменить её?"
+        box.setWindowTitle("Load library")
+        box.setText("In the file: groups %d, files %d.\n\nMerge with the current library or replace it?"
                     % (len(groups), n_files))
-        b_merge = box.addButton("Объединить", QtWidgets.QMessageBox.AcceptRole)
-        b_repl = box.addButton("Заменить", QtWidgets.QMessageBox.DestructiveRole)
-        box.addButton("Отмена", QtWidgets.QMessageBox.RejectRole)
+        b_merge = box.addButton("Merge", QtWidgets.QMessageBox.AcceptRole)
+        b_repl = box.addButton("Replace", QtWidgets.QMessageBox.DestructiveRole)
+        box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
         box.exec()
         clicked = box.clickedButton()
         if clicked not in (b_merge, b_repl):
@@ -3556,18 +3566,18 @@ class LibraryDialog(QtWidgets.QDialog):
         self._save()
         self._fill_tag_filter()
         self._fill_groups()
-        self._info(("Библиотека заменена" if clicked is b_repl else "Библиотека объединена")
-                   + ": групп %d, файлов %d. Превью создаются кнопкой «Создать превью»." % (ng, nf))
+        self._info(("Library replaced" if clicked is b_repl else "Library merged")
+                   + ": groups %d, files %d. Previews are created with the “Create previews” button." % (ng, nf))
 
     def _add_folder(self):
         g = self._target_group_for_add()
         if not g:
             return
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Папка с HDRI")
+        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Folder with HDRIs")
         if not d:
             return
         rec = QtWidgets.QMessageBox.question(
-            self, "Добавить папку", "Включить вложенные папки?",
+            self, "Add folder", "Include subfolders?",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.Yes
         found = []
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -3587,29 +3597,29 @@ class LibraryDialog(QtWidgets.QDialog):
         finally:
             QtWidgets.QApplication.restoreOverrideCursor()
         if not found:
-            self._info("В папке нет файлов .hdr / .exr.")
+            self._info("No .hdr / .exr files in the folder.")
             return
         if len(found) > 300:
             r = QtWidgets.QMessageBox.question(
-                self, "Добавить папку", "Найдено файлов: %d. Добавить все?" % len(found))
+                self, "Add folder", "Files found: %d. Add all?" % len(found))
             if r != QtWidgets.QMessageBox.Yes:
                 return
         found.sort(key=lambda p: p.lower())
         n = self.lib.add_files(g, found)
         self._save()
         self._fill_groups(select=g)
-        self._info("Добавлено новых файлов: %d. Превью создаются кнопкой «Создать превью»." % n)
+        self._info("New files added: %d. Previews are created with the “Create previews” button." % n)
 
     def _remove_files(self):
         paths = self._selected_paths()
         g = self._current_group()
         if not paths:
-            self._info("Выберите файлы в списке.")
+            self._info("Select files in the list.")
             return
-        extra = "\nФайлы будут убраны из ВСЕХ групп." if g == ALL_GROUP else ""
+        extra = "\nFiles will be removed from ALL groups." if g == ALL_GROUP else ""
         r = QtWidgets.QMessageBox.question(
-            self, "Убрать из группы",
-            "Убрать выбранные файлы (%d) из «%s»?\nНа диске файлы НЕ удаляются.%s" % (len(paths), g, extra))
+            self, "Remove from group",
+            "Remove the selected files (%d) from “%s”?\nFiles on disk are NOT deleted.%s" % (len(paths), g, extra))
         if r == QtWidgets.QMessageBox.Yes:
             self.lib.remove_files(g, paths)
             self._save()
@@ -3618,15 +3628,15 @@ class LibraryDialog(QtWidgets.QDialog):
     def _copy_to_group(self):
         paths = self._selected_paths()
         if not paths:
-            self._info("Выберите файлы в списке.")
+            self._info("Select files in the list.")
             return
-        target = self._ask_group("Добавить выбранные в группу")
+        target = self._ask_group("Add selected to group")
         if not target:
             return
         n = self.lib.add_files(target, paths)
         self._save()
         self._fill_groups(select=self._current_group())
-        self._info("Добавлено в «%s»: %d." % (target, n))
+        self._info("Added to “%s”: %d." % (target, n))
 
     # ---------- превью ----------
     def _on_cancel(self):
@@ -3642,7 +3652,7 @@ class LibraryDialog(QtWidgets.QDialog):
         todo = [p for p in files if os.path.isfile(p)
                 and not os.path.isfile(png_path(p, self.lib.thumb_ev))]
         if not todo:
-            self._info("Все превью уже созданы.")
+            self._info("All previews already exist.")
             return
         self._busy, self._cancel = True, False
         self.b_thumbs.setEnabled(False)
@@ -3653,7 +3663,7 @@ class LibraryDialog(QtWidgets.QDialog):
                 if self._cancel:
                     break
                 self.progress.setValue(int((i - 1) * 100 / len(todo)))
-                self.progress.setFormat("Превью: %d из %d" % (i - 1, len(todo)))
+                self.progress.setFormat("Previews: %d of %d" % (i - 1, len(todo)))
                 QtWidgets.QApplication.processEvents()
                 try:
                     if make_thumb(p, self.lib.thumb_ev):
@@ -3661,8 +3671,8 @@ class LibraryDialog(QtWidgets.QDialog):
                 except Exception:
                     print("[SkyRig Studio] thumb error for %s:\n%s" % (p, traceback.format_exc()))
             self.progress.setValue(100 if not self._cancel else self.progress.value())
-            self.progress.setFormat("Готово: %d из %d" % (done, len(todo)) if not self._cancel
-                                    else "Отменено: %d из %d" % (done, len(todo)))
+            self.progress.setFormat("Done: %d of %d" % (done, len(todo)) if not self._cancel
+                                    else "Cancelled: %d of %d" % (done, len(todo)))
         finally:
             self._busy = False
             self.b_thumbs.setEnabled(True)
@@ -3693,10 +3703,10 @@ class LibraryDialog(QtWidgets.QDialog):
 
     # ---------- выравнивание яркости ----------
     def _update_norm_label(self):
-        ref = os.path.basename(self.lib.norm_ref) if self.lib.norm_ref else "не выбран"
+        ref = os.path.basename(self.lib.norm_ref) if self.lib.norm_ref else "none selected"
         n = len(self.lib.brightness)
-        self.lbl_norm.setText("Эталон: %s. Выравнивание %s. Измерено карт: %d." % (
-            ref, "включено" if self.lib.norm_enabled else "выключено", n))
+        self.lbl_norm.setText("Reference: %s. Balancing is %s. Maps measured: %d." % (
+            ref, "enabled" if self.lib.norm_enabled else "disabled", n))
 
     def _find_default_ref(self):
         for p in self.lib.files_of(ALL_GROUP):
@@ -3721,7 +3731,7 @@ class LibraryDialog(QtWidgets.QDialog):
         if not self.lib.norm_ref or not os.path.isfile(self.lib.norm_ref):
             ref = self._find_default_ref()
             if not ref:
-                self._info("Эталон не найден. Выделите карту в списке и нажмите «Эталон = выбранная».", error=True)
+                self._info("Reference not found. Select a map in the list and press “Reference = selected”.", error=True)
                 return
             self.lib.norm_ref = ref
         files = [p for p in self.lib.files_of(ALL_GROUP) if os.path.isfile(p)]
@@ -3736,7 +3746,7 @@ class LibraryDialog(QtWidgets.QDialog):
                 if self._cancel:
                     break
                 self.progress.setValue(int((i - 1) * 100 / len(files)))
-                self.progress.setFormat("Яркость: %d из %d" % (i - 1, len(files)))
+                self.progress.setFormat("Brightness: %d of %d" % (i - 1, len(files)))
                 QtWidgets.QApplication.processEvents()
                 try:
                     if self._measure(p):
@@ -3748,8 +3758,8 @@ class LibraryDialog(QtWidgets.QDialog):
                     print("[SkyRig Studio] brightness error for %s:\n%s" % (p, traceback.format_exc()))
             cancelled = self._cancel
             self.progress.setValue(100 if not cancelled else self.progress.value())
-            self.progress.setFormat("Готово: %d из %d" % (ok, len(files)) if not cancelled
-                                    else "Отменено: %d из %d" % (ok, len(files)))
+            self.progress.setFormat("Done: %d of %d" % (ok, len(files)) if not cancelled
+                                    else "Cancelled: %d of %d" % (ok, len(files)))
         finally:
             self._busy = False
             self.b_thumbs.setEnabled(True)
@@ -3758,18 +3768,18 @@ class LibraryDialog(QtWidgets.QDialog):
             self._save()
             return
         if not self.lib.brightness.get(path_key(self.lib.norm_ref)):
-            self._info("Эталон не удалось измерить — выравнивание не включено.", error=True)
+            self._info("Could not measure the reference, so balancing is not turned on.", error=True)
             self._save()
             return
         self.lib.norm_enabled = True
         self._save()
         offs = [self.lib.norm_offset(p) for p in files]
         offs = [o for o in offs if o is not None]
-        msg = "Выровнено карт: %d по эталону «%s»" % (len(offs), os.path.basename(self.lib.norm_ref))
+        msg = "Maps balanced: %d against reference “%s”" % (len(offs), os.path.basename(self.lib.norm_ref))
         if offs:
-            msg += " (поправки от %+.1f до %+.1f EV)" % (min(offs), max(offs))
+            msg += " (corrections from %+.1f to %+.1f EV)" % (min(offs), max(offs))
         if failed:
-            msg += ". Не удалось измерить: %d" % failed
+            msg += ". Could not measure: %d" % failed
         self._info(msg + ".")
         self._update_norm_label()
         try:
@@ -3787,24 +3797,24 @@ class LibraryDialog(QtWidgets.QDialog):
             self.owner.reset_norm_current()
         except Exception:
             print("[SkyRig Studio] reset norm error:\n" + traceback.format_exc())
-        self._info("Выравнивание выключено, Exposure возвращён к 0.")
+        self._info("Balancing turned off, Exposure returned to 0.")
 
     def _set_reference(self):
         sel = self._selected_paths()
         if len(sel) != 1:
-            self._info("Выделите в списке одну карту — она станет эталоном.", error=True)
+            self._info("Select one map in the list; it will become the reference.", error=True)
             return
         self.lib.norm_ref = sel[0]
         try:
             if not self._measure(sel[0]):
-                self._info("Не удалось измерить эталон.", error=True)
+                self._info("Could not measure the reference.", error=True)
                 return
         except Exception:
-            self._info("Не удалось измерить эталон (см. Listener).", error=True)
+            self._info("Could not measure the reference (see Listener).", error=True)
             return
         self._save()
         self._update_norm_label()
-        self._info("Эталон: «%s». Нажмите «Выровнять яркость», чтобы пересчитать остальные карты." %
+        self._info("Reference: “%s”. Press “Balance brightness” to recalculate the other maps." %
                    os.path.basename(sel[0]))
         if self.lib.norm_enabled:
             try:
@@ -3834,7 +3844,7 @@ class LibraryDialog(QtWidgets.QDialog):
         files = sel if scope == "sel" else self.lib.files_of(grp if scope == "grp" else ALL_GROUP)
         files = [p for p in files if os.path.isfile(p)]
         if not files:
-            self._info("Нет доступных файлов для анализа.", error=True)
+            self._info("No files available for analysis.", error=True)
             return
         use_name, to_groups = dlg.chk_name.isChecked(), dlg.chk_groups.isChecked()
         self._busy, self._cancel = True, False
@@ -3846,7 +3856,7 @@ class LibraryDialog(QtWidgets.QDialog):
                 if self._cancel:
                     break
                 self.progress.setValue(int((i - 1) * 100 / len(files)))
-                self.progress.setFormat("Освещение: %d из %d" % (i - 1, len(files)))
+                self.progress.setFormat("Lighting: %d of %d" % (i - 1, len(files)))
                 QtWidgets.QApplication.processEvents()
                 try:
                     cls, _how = detect_light(p, use_name)
@@ -3862,8 +3872,8 @@ class LibraryDialog(QtWidgets.QDialog):
                 if done % 20 == 0:
                     self._save()
             self.progress.setValue(100 if not self._cancel else self.progress.value())
-            self.progress.setFormat("Готово: %d из %d" % (done, len(files)) if not self._cancel
-                                    else "Отменено: %d из %d" % (done, len(files)))
+            self.progress.setFormat("Done: %d of %d" % (done, len(files)) if not self._cancel
+                                    else "Cancelled: %d of %d" % (done, len(files)))
         finally:
             self._busy = False
             self.b_thumbs.setEnabled(True)
@@ -3871,26 +3881,26 @@ class LibraryDialog(QtWidgets.QDialog):
         self._save()
         self._fill_tag_filter()
         self._fill_groups()
-        msg = "Размечено: %d" % done
+        msg = "Tagged: %d" % done
         if counts:
             msg += " (" + ", ".join("%s — %d" % (c, counts[c]) for c in LIGHT_CLASSES if c in counts) + ")"
         if failed:
-            msg += ". Не удалось: %d" % failed
+            msg += ". Failed: %d" % failed
         self._info(msg)
 
     def _delete_thumbs(self):
         paths = self._selected_paths()
         if not paths:
-            self._info("Выберите файлы в списке.")
+            self._info("Select files in the list.")
             return
         r = QtWidgets.QMessageBox.question(
-            self, "Удалить превью",
-            "Удалить превью выбранных файлов (%d)?\nФайлы HDRI на диске не удаляются." % len(paths))
+            self, "Delete previews",
+            "Delete previews of the selected files (%d)?\nHDRI files on disk are not deleted." % len(paths))
         if r != QtWidgets.QMessageBox.Yes:
             return
         n = sum(delete_thumbs(p) for p in paths)
         self._fill_files()
-        self._info("Удалено файлов кэша превью: %d. Создать заново — кнопка «Создать превью»." % n)
+        self._info("Preview cache files deleted: %d. To create them again, use the “Create previews” button." % n)
 
     def _on_ev_changed(self, v):
         """Новая экспозиция превью: пересчёт из кэша .lin (Max не нужен, быстро)."""
@@ -3909,14 +3919,14 @@ class LibraryDialog(QtWidgets.QDialog):
                 if self._cancel:
                     break
                 self.progress.setValue(int((i - 1) * 100 / max(1, len(files))))
-                self.progress.setFormat("Экспозиция: %d из %d" % (i - 1, len(files)))
+                self.progress.setFormat("Exposure: %d of %d" % (i - 1, len(files)))
                 QtWidgets.QApplication.processEvents()
                 try:
                     render_thumb(p, ev)
                 except Exception:
                     print("[SkyRig Studio] re-render error for %s:\n%s" % (p, traceback.format_exc()))
             self.progress.setValue(100)
-            self.progress.setFormat("Готово: %d" % len(files))
+            self.progress.setFormat("Done: %d" % len(files))
         finally:
             self._busy = False
             self.b_thumbs.setEnabled(True)
@@ -3927,16 +3937,16 @@ class LibraryDialog(QtWidgets.QDialog):
     def _apply(self):
         paths = self._selected_paths()
         if not paths:
-            self._info("Выберите файл в списке.")
+            self._info("Select a file in the list.")
             return
         p = paths[0]
         if not os.path.isfile(p):
-            self._info("Файл не найден: %s" % p, error=True)
+            self._info("File not found: %s" % p, error=True)
             return
         if self.apply_cb(p):
             self.current_path = p
             self._fill_files()
-            self._info("Применён: %s" % os.path.basename(p))
+            self._info("Applied: %s" % os.path.basename(p))
 
 
 # ==========================================================================
@@ -4003,12 +4013,12 @@ class SunCompass(QtWidgets.QWidget):
         super().__init__(parent)
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(QtCore.Qt.OpenHandCursor)
-        self.setToolTip("Солнце на небесной сфере.\n"
-                        "Клик — поставить солнце в это место по азимуту (высота не меняется), HDRI поворачивается "
-                        "вместе с ним (яркая точка карты остаётся под солнцем).\n"
-                        "Тяните мышью — вращать вид, правая кнопка — вернуть вид.\n"
-                        "N/E/S/W — стороны света (N = +Y сцены). Жёлтая точка — солнце, голубой сектор — "
-                        "направление активной камеры.")
+        self.setToolTip("Sun on the sky sphere.\n"
+                        "Click: place the sun here by azimuth (elevation does not change); the HDRI rotates "
+                        "with it (the bright point of the map stays under the sun).\n"
+                        "Drag with the mouse: rotate the view; right button: reset the view.\n"
+                        "N/E/S/W: compass directions (N = scene +Y). Yellow dot: the sun; light blue sector: "
+                        "direction of the active camera.")
         self.show_tex = True
         self.yaw, self.pitch = 200.0, 28.0          # откуда смотрим: азимут и высота
         self.sun = None                              # (азимут, высота)
@@ -4415,13 +4425,13 @@ class SafeEnvironment(QtWidgets.QWidget):
             hor = bm_horizon(bm) if bm is not None else 0.0
             cam = self._active_cam_heading()
             self.compass.set_state(sun, rot, HORIZON_ELEV_SIGN * hor, 1.0, cam)
-            txt = "Солнце: азимут %.1f°, высота %.1f°" % (sun[0], sun[1]) if sun else "Солнца в сцене нет"
+            txt = "Sun: azimuth %.1f°, elevation %.1f°" % (sun[0], sun[1]) if sun else "No sun in the scene"
             if cam:
-                txt += "\nКамера: азимут %.0f°" % cam[0]
+                txt += "\nCamera: azimuth %.0f°" % cam[0]
                 if sun:
                     d = abs(sun[0] - cam[0]) % 360.0
                     d = min(d, 360.0 - d)
-                    txt += ", солнце %s" % ("спереди" if d < 60 else ("сзади" if d > 120 else "сбоку"))
+                    txt += ", sun %s" % ("in front" if d < 60 else ("behind" if d > 120 else "to the side"))
             self.lbl_compass.setText(txt)
         except Exception:
             print("[SkyRig Studio] compass update error:\n" + traceback.format_exc())
@@ -4437,14 +4447,14 @@ class SafeEnvironment(QtWidgets.QWidget):
                 name = self._active_preset = None
             if not name:
                 self.lbl_state.setStyleSheet("color: #e0b050;")
-                self.lbl_state.setText("Пресет: не выбран. Текущие настройки света не сохранены в пресет.")
+                self.lbl_state.setText("Preset: none selected. Current lighting settings are not saved to a preset.")
             elif self._preset_matches(name):
                 self.lbl_state.setStyleSheet("color: #7fcf7f;")
-                self.lbl_state.setText("Пресет: «%s». Настройки совпадают с сохранённым пресетом." % name)
+                self.lbl_state.setText("Preset: “%s”. Settings match the saved preset." % name)
             else:
                 self.lbl_state.setStyleSheet("color: #e0b050;")
-                self.lbl_state.setText("Пресет: «%s». Настройки изменены и не сохранены "
-                                       "(«Обновить» — перезаписать)." % name)
+                self.lbl_state.setText("Preset: “%s”. Settings were changed and not saved "
+                                       "(“Update” overwrites it)." % name)
             ok = self._link_ok()
             uv = None
             if ok:
@@ -4456,10 +4466,10 @@ class SafeEnvironment(QtWidgets.QWidget):
                 self.lbl_link.setText("")
             elif ok:
                 self.lbl_link.setStyleSheet("")
-                self.lbl_link.setText("Солнце совмещено с самой яркой точкой HDRI.")
+                self.lbl_link.setText("The sun is aligned with the brightest point of the HDRI.")
             else:
                 self.lbl_link.setStyleSheet("color: #ff4040; font-weight: bold;")
-                self.lbl_link.setText("Привязка солнца к самой яркой точке HDRI не сделана.")
+                self.lbl_link.setText("The sun is not linked to the brightest point of the HDRI.")
         except Exception:
             print("[SkyRig Studio] state error:\n" + traceback.format_exc())
 
@@ -4479,22 +4489,22 @@ class SafeEnvironment(QtWidgets.QWidget):
                 rt.redrawViews()
             except Exception:
                 pass
-            alog("DONE %s (%d мс)" % (title, (time.time() - t0) * 1000))
+            alog("DONE %s (%d ms)" % (title, (time.time() - t0) * 1000))
             return result
         except Exception:
             alog("FAIL %s: %s" % (title, traceback.format_exc().strip().splitlines()[-1]))
             print("[SkyRig Studio] %s:\n%s" % (title, traceback.format_exc()))
-            self._status("Ошибка: %s (подробности в Listener)" % title, error=True)
+            self._status("Error: %s (details in Listener)" % title, error=True)
             return None
 
     # ---------- обновление скрипта ----------
     def _refresh_update_ui(self):
         latest = self.lib.update_latest
         if latest and ver_tuple(latest) > ver_tuple(VERSION):
-            self.b_update.setText("Обновить до v%s" % latest)
+            self.b_update.setText("Update to v%s" % latest)
             self.b_update.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold;")
         else:
-            self.b_update.setText("Проверить обновления")
+            self.b_update.setText("Check for updates")
             self.b_update.setStyleSheet("")
 
     def _save_lib(self):
@@ -4517,12 +4527,12 @@ class SafeEnvironment(QtWidgets.QWidget):
         try:
             code = getattr(err, "code", None)
             if code == 404:
-                why = "Страница обновлений не найдена (ошибка 404). Попробуйте позже или сообщите автору скрипта."
+                why = "Update page not found (error 404). Try again later or contact the script author."
             elif code:
-                why = "Сервер ответил ошибкой %s." % code
+                why = "The server returned error %s." % code
             else:
-                why = "Нет связи с сервером обновлений. Проверьте подключение к интернету."
-            QtWidgets.QMessageBox.warning(self, "Обновления", "%s.\n\n%s\n\nПодробности: %s" % (title, why, err))
+                why = "No connection to the update server. Check your internet connection."
+            QtWidgets.QMessageBox.warning(self, "Updates", "%s.\n\n%s\n\nDetails: %s" % (title, why, err))
         except Exception:
             print("[SkyRig Studio] update error box failed:\n" + traceback.format_exc())
 
@@ -4541,8 +4551,8 @@ class SafeEnvironment(QtWidgets.QWidget):
         if err is not None:
             self._save_lib()
             if not silent:
-                self._status("Не удалось проверить обновления: %s" % err, error=True)
-                self._update_error_box("Не удалось проверить обновления", err)
+                self._status("Could not check for updates: %s" % err, error=True)
+                self._update_error_box("Could not check for updates", err)
             return None
         newer = ver_tuple(man["version"]) > ver_tuple(VERSION)
         self.lib.update_latest = man["version"] if newer else ""
@@ -4550,10 +4560,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._save_lib()
         self._refresh_update_ui()
         if not newer and not silent:
-            self._status("Установлена последняя версия (v%s)." % VERSION)
-            QtWidgets.QMessageBox.information(self, "Обновления", "У вас установлена последняя версия: v%s." % VERSION)
+            self._status("You have the latest version (v%s)." % VERSION)
+            QtWidgets.QMessageBox.information(self, "Updates", "You have the latest version: v%s." % VERSION)
         elif newer and silent:
-            self._status("Доступна новая версия v%s — кнопка вверху." % man["version"])
+            self._status("A new version v%s is available: see the button at the top." % man["version"])
         return man if newer else None
 
     def _on_update_button(self):
@@ -4567,8 +4577,8 @@ class SafeEnvironment(QtWidgets.QWidget):
                 if ver_tuple(man["version"]) <= ver_tuple(VERSION):
                     man = None
             except Exception as ex:
-                self._status("Не удалось получить обновление: %s" % ex, error=True)
-                self._update_error_box("Не удалось получить обновление", ex)
+                self._status("Could not get the update: %s" % ex, error=True)
+                self._update_error_box("Could not get the update", ex)
                 return
         if man is None:
             man = self.check_updates(silent=False)
@@ -4594,17 +4604,17 @@ class SafeEnvironment(QtWidgets.QWidget):
     def _install_update(self, man):
         path = script_path()
         if not path:
-            self._status("Скрипт запущен не из файла — автообновление недоступно. Скачайте новую версию вручную.", error=True)
+            self._status("The script was not started from a file, so auto-update is unavailable. Download the new version manually.", error=True)
             return
         notes = man.get("notes") or "—"
         if not self._ask(
-                "Доступно обновление",
-                "Доступна новая версия SkyRig Studio: v%s\nУстановлена версия: v%s" % (man["version"], VERSION),
-                "Обновить", "Отмена",
-                info="Что нового:\n%s\n\nПосле обновления окно скрипта перезапустится. Предыдущая версия сохранится, "
-                     "к ней можно вернуться (меню «▾»)." % notes,
+                "Update available",
+                "A new version of SkyRig Studio is available: v%s\nInstalled version: v%s" % (man["version"], VERSION),
+                "Update", "Cancel",
+                info="What's new:\n%s\n\nAfter the update the script window will restart. The previous version is kept, "
+                     "and you can go back to it (“▾” menu)." % notes,
                 icon=QtWidgets.QMessageBox.Information):
-            self._status("Обновление отменено. Кнопка «Обновить до v%s» остаётся вверху." % man["version"])
+            self._status("Update cancelled. The “Update to v%s” button stays at the top." % man["version"])
             return
         self._wait_cursor(True)
         try:
@@ -4613,31 +4623,31 @@ class SafeEnvironment(QtWidgets.QWidget):
             update_write(path, data)
         except PermissionError:
             self._wait_cursor(False)
-            self._status("Нет прав на запись в %s — обновление не установлено." % path, error=True)
+            self._status("No write permission for %s: the update was not installed." % path, error=True)
             return
         except Exception as ex:
             self._wait_cursor(False)
             print("[SkyRig Studio] update error:\n" + traceback.format_exc())
-            self._status("Обновление не установлено: %s" % ex, error=True)
+            self._status("Update not installed: %s" % ex, error=True)
             return
         self._wait_cursor(False)
         self.lib.update_latest, self.lib.update_notes = "", ""
         self._save_lib()
-        self._status("Установлена v%s, перезапуск окна..." % man["version"])
+        self._status("v%s installed, restarting the window..." % man["version"])
         QtCore.QTimer.singleShot(50, lambda p=path, v=VERSION: reload_script(p, v))
 
     def _show_update_menu(self):
         menu = QtWidgets.QMenu(self)
-        act_auto = menu.addAction("Проверять при запуске (раз в сутки)")
+        act_auto = menu.addAction("Check on startup (once a day)")
         act_auto.setCheckable(True)
         act_auto.setChecked(self.lib.update_auto)
         backs = [(v, p) for v, p in update_backups() if v != VERSION]
-        act_back = menu.addAction("Вернуть предыдущую версию (%s)" % backs[0][0] if backs else "Вернуть предыдущую версию")
+        act_back = menu.addAction("Restore previous version (%s)" % backs[0][0] if backs else "Restore previous version")
         act_back.setEnabled(bool(backs))
-        act_notes = menu.addAction("Что нового в доступной версии")
+        act_notes = menu.addAction("What's new in the available version")
         act_notes.setEnabled(bool(self.lib.update_notes))
-        act_page = menu.addAction("Страница проекта на GitHub")
-        act_log = menu.addAction("Открыть журнал действий")
+        act_page = menu.addAction("Project page on GitHub")
+        act_log = menu.addAction("Open action log")
         act = menu.exec(self.b_update_menu.mapToGlobal(QtCore.QPoint(0, self.b_update_menu.height())))
         if act is None:
             return
@@ -4647,11 +4657,11 @@ class SafeEnvironment(QtWidgets.QWidget):
         elif act is act_back:
             self._rollback(backs[0])
         elif act is act_notes:
-            QtWidgets.QMessageBox.information(self, WINDOW_TITLE, "Версия %s:\n\n%s" % (self.lib.update_latest, self.lib.update_notes))
+            QtWidgets.QMessageBox.information(self, WINDOW_TITLE, "Version %s:\n\n%s" % (self.lib.update_latest, self.lib.update_notes))
         elif act is act_log:
             try:
                 if not os.path.isfile(ACTION_LOG):
-                    alog("журнал создан")
+                    alog("log created")
                 QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(ACTION_LOG))
             except Exception:
                 pass
@@ -4662,10 +4672,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         ver, bpath = item
         path = script_path()
         if not path:
-            self._status("Скрипт запущен не из файла — откат недоступен.", error=True)
+            self._status("The script was not started from a file, so rollback is unavailable.", error=True)
             return
-        if not self._ask("Вернуть предыдущую версию", "Вернуть версию v%s?" % ver, "Вернуть", "Отмена",
-                         info="Текущая версия (v%s) сохранится в резервных копиях." % VERSION, default_yes=False):
+        if not self._ask("Restore previous version", "Restore version v%s?" % ver, "Restore", "Cancel",
+                         info="The current version (v%s) will be kept in backups." % VERSION, default_yes=False):
             return
         try:
             with open(bpath, "rb") as fh:
@@ -4675,12 +4685,12 @@ class SafeEnvironment(QtWidgets.QWidget):
             update_write(path, data)
         except Exception as ex:
             print("[SkyRig Studio] rollback error:\n" + traceback.format_exc())
-            self._status("Откат не выполнен: %s" % ex, error=True)
+            self._status("Rollback failed: %s" % ex, error=True)
             return
         self.lib.update_latest, self.lib.update_notes = "", ""
         self.lib.update_checked = time.time()                      # чтобы автопроверка не вернула новую версию сразу
         self._save_lib()
-        self._status("Возврат к v%s, перезапуск окна..." % ver)
+        self._status("Going back to v%s, restarting the window..." % ver)
         QtCore.QTimer.singleShot(50, lambda p=path, v=VERSION: reload_script(p, v))
 
     def _wait_cursor(self, on):
@@ -4711,8 +4721,8 @@ class SafeEnvironment(QtWidgets.QWidget):
         for b_ in (self.b_mode_simple, self.b_mode_adv):
             b_.setCheckable(True)
             b_.setProperty("seg", True)
-        self.b_mode_simple.setToolTip("Только основное: превью, поворот, экспозиция, солнце и пресеты.")
-        self.b_mode_adv.setToolTip("Все параметры: Gamma, Saturation, Blur, Horizon, каналы EV, размеры солнца, компас.")
+        self.b_mode_simple.setToolTip("Essentials only: preview, rotation, exposure, sun and presets.")
+        self.b_mode_adv.setToolTip("All parameters: Gamma, Saturation, Blur, Horizon, EV channels, sun sizes, compass.")
         self.b_mode_simple.clicked.connect(lambda: self._set_simple_mode(True))
         self.b_mode_adv.clicked.connect(lambda: self._set_simple_mode(False))
         mr.addWidget(self.b_mode_simple)
@@ -4722,25 +4732,25 @@ class SafeEnvironment(QtWidgets.QWidget):
         # --- обновления ---
         ur = QtWidgets.QHBoxLayout()
         ur.setSpacing(2)
-        self.b_update = QtWidgets.QPushButton("Проверить обновления")
-        self.b_update.setToolTip("Проверить, есть ли новая версия скрипта на GitHub. Обновление ставится только "
-                                 "после вашего подтверждения; предыдущая версия сохраняется для отката.")
+        self.b_update = QtWidgets.QPushButton("Check for updates")
+        self.b_update.setToolTip("Checks whether a new version of the script is available on GitHub. An update is installed only "
+                                 "after your confirmation; the previous version is kept for rollback.")
         self.b_update.clicked.connect(self._on_update_button)
         self.b_update_menu = QtWidgets.QPushButton("▾")
         self.b_update_menu.setFixedWidth(26)
-        self.b_update_menu.setToolTip("Настройки обновления")
+        self.b_update_menu.setToolTip("Update settings")
         self.b_update_menu.clicked.connect(self._show_update_menu)
         ur.addWidget(self.b_update, 1)
         ur.addWidget(self.b_update_menu)
         root.addLayout(ur)
 
         # --- превью ---
-        self.lbl_preview = ClickableLabel("Нет HDRI\n(клик — открыть библиотеку)")
+        self.lbl_preview = ClickableLabel("No HDRI\n(click to open the library)")
         self.lbl_preview.setFixedSize(PREVIEW_W, PREVIEW_H)
         self.lbl_preview.setAlignment(QtCore.Qt.AlignCenter)
         self.lbl_preview.setCursor(QtCore.Qt.PointingHandCursor)
         self.lbl_preview.setStyleSheet("border: 1px solid #555; border-radius: 6px; background: #222;")
-        self.lbl_preview.setToolTip("Клик — открыть библиотеку HDRI")
+        self.lbl_preview.setToolTip("Click to open the HDRI library")
         self.lbl_preview.clicked.connect(self.open_library)
         row = QtWidgets.QHBoxLayout()
         row.addStretch(1)
@@ -4753,23 +4763,23 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addWidget(self.lbl_current)
 
         row_nav = QtWidgets.QHBoxLayout()
-        b_prev = QtWidgets.QPushButton("Пред.")
+        b_prev = QtWidgets.QPushButton("Prev")
         set_btn_icon(b_prev, "prev")
-        b_prev.setToolTip("Предыдущая HDRI в группе, выбранной в библиотеке (по кругу). Если включена привязка — солнце ставится на её яркую точку.")
+        b_prev.setToolTip("Previous HDRI in the group selected in the library (wraps around). If linking is on, the sun is placed on its bright point.")
         b_prev.clicked.connect(lambda: self.step_hdri(-1))
-        b_next = QtWidgets.QPushButton("След.")
+        b_next = QtWidgets.QPushButton("Next")
         set_btn_icon(b_next, "next")
         b_next.setLayoutDirection(QtCore.Qt.RightToLeft)
-        b_next.setToolTip("Следующая HDRI в группе, выбранной в библиотеке (по кругу). Если включена привязка — солнце ставится на её яркую точку.")
+        b_next.setToolTip("Next HDRI in the group selected in the library (wraps around). If linking is on, the sun is placed on its bright point.")
         b_next.clicked.connect(lambda: self.step_hdri(1))
         row_nav.addWidget(b_prev)
         row_nav.addWidget(b_next)
         root.addLayout(row_nav)
         row = QtWidgets.QHBoxLayout()
-        b_lib = QtWidgets.QPushButton("Библиотека...")
+        b_lib = QtWidgets.QPushButton("Library...")
         set_btn_icon(b_lib, "library")
         b_lib.clicked.connect(self.open_library)
-        b_reload = QtWidgets.QPushButton("Перезагрузить HDR")
+        b_reload = QtWidgets.QPushButton("Reload HDR")
         set_btn_icon(b_reload, "reload")
         b_reload.clicked.connect(self.reload_hdr)
         row.addWidget(b_lib)
@@ -4777,14 +4787,14 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addLayout(row)
         b_ir = QtWidgets.QPushButton("Start Interactive Render")
         b_ir.setMinimumHeight(30)
-        b_ir.setToolTip("Запускает интерактивный рендер Corona (Interactive Rendering) в активном виде.")
+        b_ir.setToolTip("Starts Corona Interactive Rendering in the active viewport.")
         b_ir.clicked.connect(self.start_interactive)
         mark_primary(b_ir)
         set_btn_icon(b_ir, "play", "#1e1e1e")
         root.addWidget(b_ir)
 
         # --- настройки HDRI ---
-        g = self._card("Настройки HDRI", "hdri")
+        g = self._card("HDRI settings", "hdri")
         f = QtWidgets.QFormLayout(g.body)
         f.setContentsMargins(0, 2, 0, 0)
         self.sp_rot = make_spin(-100000, 100000, 1, 0, "°", default=0.0, pixel_divider=1.0)   # целые градусы, 1°/пиксель
@@ -4796,13 +4806,13 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.sp_sat = make_spin(0, 200, 5, 1, " %", default=100.0)   # 100 % = без изменений
         self.sp_blur = make_spin(BLUR_MIN, BLUR_MAX, 0.1, 2, default=BLUR_DEFAULT, pixel_divider=0.1)   # Blur у CoronaBitmap
         self.sp_horizon = make_spin(HORIZON_MIN, HORIZON_MAX, 0.1, 2, "°", default=0.0, pixel_divider=0.1)
-        self.sp_horizon.setToolTip("Сдвиг горизонта HDRI по вертикали (Offset V у CoronaBitmap).")
+        self.sp_horizon.setToolTip("Vertical shift of the HDRI horizon (Offset V of CoronaBitmap).")
         self.sp_cam = make_spin(-10, 10, 0.1, 2, " EV", default=0.0)
-        self.sp_cam.setToolTip("Яркость фона, который видит камера, относительно основной экспозиции. 0 = без отдельной настройки.")
+        self.sp_cam.setToolTip("Brightness of the background the camera sees, relative to the main exposure. 0 = no separate adjustment.")
         self.sp_refl = make_spin(-10, 10, 0.1, 2, " EV", default=0.0)
-        self.sp_refl.setToolTip("Яркость HDRI в отражениях относительно основной экспозиции. 0 = без отдельной настройки.")
+        self.sp_refl.setToolTip("Brightness of the HDRI in reflections, relative to the main exposure. 0 = no separate adjustment.")
         self.sp_refr = make_spin(-10, 10, 0.1, 2, " EV", default=0.0)
-        self.sp_refr.setToolTip("Яркость HDRI в преломлениях относительно основной экспозиции. 0 = без отдельной настройки.")
+        self.sp_refr.setToolTip("Brightness of the HDRI in refractions, relative to the main exposure. 0 = no separate adjustment.")
         self.sp_rot.valueChanged.connect(self._on_rot_spin)
         self.sl_rot.valueChanged.connect(self._on_rot_slider)
         for s in (self.sp_exp, self.sp_gamma, self.sp_sat, self.sp_blur, self.sp_horizon,
@@ -4812,10 +4822,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         f.addRow("", self.sl_rot)
         row_step = QtWidgets.QHBoxLayout()
         b_rm = QtWidgets.QPushButton("−5°")
-        b_rm.setToolTip("Повернуть HDRI на 5° в минус")
+        b_rm.setToolTip("Rotate the HDRI by 5° in the negative direction")
         b_rm.clicked.connect(lambda: self.sp_rot.setValue(self.sp_rot.value() - 5.0))
         b_rp = QtWidgets.QPushButton("+5°")
-        b_rp.setToolTip("Повернуть HDRI на 5° в плюс")
+        b_rp.setToolTip("Rotate the HDRI by 5° in the positive direction")
         b_rp.clicked.connect(lambda: self.sp_rot.setValue(self.sp_rot.value() + 5.0))
         row_step.addWidget(b_rm)
         row_step.addWidget(b_rp)
@@ -4836,36 +4846,36 @@ class SafeEnvironment(QtWidgets.QWidget):
         f.addRow("Blur", row_blur)
         f.addRow("Horizon", self.sp_horizon)
         self.cmb_target = TargetCombo(self._refresh_target_label)
-        self.cmb_target.addItem("Общие настройки Corona", TARGET_RENDERER)
-        self.cmb_target.addItem("Активная CoronaCam", TARGET_CAMERA)
+        self.cmb_target.addItem("Corona global settings", TARGET_RENDERER)
+        self.cmb_target.addItem("Active CoronaCam", TARGET_CAMERA)
         self._refresh_target_label()
         self.cmb_target.setCurrentIndex(1 if self.lib.channel_target == TARGET_CAMERA else 0)
-        self.cmb_target.setToolTip("Куда писать Direct / Reflect / Refract EV: в Scene Environment общих настроек Corona "
-                                   "или в Environment override активной (в текущем виде) CoronaCam.")
+        self.cmb_target.setToolTip("Where to write Direct / Reflect / Refract EV: to the Scene Environment of the global Corona settings "
+                                   "or to the Environment override of the active (in the current view) CoronaCam.")
         self.cmb_target.currentIndexChanged.connect(self._on_target_changed)
-        f.addRow("Каналы EV в", self.cmb_target)
+        f.addRow("EV channels in", self.cmb_target)
         f.addRow("Direct EV", self.sp_cam)
         f.addRow("Reflect EV", self.sp_refl)
         f.addRow("Refract EV", self.sp_refr)
-        b_reset = QtWidgets.QPushButton("Сбросить настройки HDRI")
+        b_reset = QtWidgets.QPushButton("Reset HDRI settings")
         set_btn_icon(b_reset, "reset")
         b_reset.clicked.connect(self.reset_hdri_settings)
         f.addRow(b_reset)
         root.addWidget(g)
 
         # --- солнце ---
-        gs = self._card("Солнце (Corona Sun)", "sun")
+        gs = self._card("Sun (Corona Sun)", "sun")
         sl = QtWidgets.QVBoxLayout(gs.body)
         sl.setContentsMargins(0, 2, 0, 0)
-        self.lbl_sun = QtWidgets.QLabel("Солнце: не найдено")
+        self.lbl_sun = QtWidgets.QLabel("Sun: not found")
         sl.addWidget(self.lbl_sun)
         row = QtWidgets.QHBoxLayout()
-        b_create = QtWidgets.QPushButton("Создать в центре")
+        b_create = QtWidgets.QPushButton("Create at center")
         set_btn_icon(b_create, "sun")
         b_create.clicked.connect(self.create_sun)
-        b_select = QtWidgets.QPushButton("Выделить")
+        b_select = QtWidgets.QPushButton("Select")
         b_select.clicked.connect(self.select_sun)
-        self.chk_on = ToggleSwitch("Вкл.")
+        self.chk_on = ToggleSwitch("On")
         self.chk_on.toggled.connect(self._on_sun_setting)
         row.addWidget(b_create)
         row.addWidget(b_select)
@@ -4884,20 +4894,20 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.sp_size.valueChanged.connect(self._on_sun_setting)
         self.sp_dist.valueChanged.connect(self._on_sun_setting)
         self.sp_icon.valueChanged.connect(self._on_sun_setting)
-        self.sp_elev.setToolTip("Высота солнца над горизонтом, градусы")
+        self.sp_elev.setToolTip("Sun elevation above the horizon, degrees")
         fs.addRow("Height", self.sp_elev)
-        self.sp_azim.setToolTip("Азимут: 0 = север (+Y), по часовой стрелке")
+        self.sp_azim.setToolTip("Azimuth: 0 = north (+Y), clockwise")
         fs.addRow("Azimuth", self.sp_azim)
         fs.addRow("Intensity", self.sp_int)
         fs.addRow("Size", self.sp_size)
-        self.sp_dist.setToolTip("Расстояние от цели (0, 0, 0) до солнца, метры")
-        fs.addRow("Расстояние", self.sp_dist)
-        self.sp_icon.setToolTip("Размер значка солнца во вьюпорте, метры")
-        fs.addRow("Значок", self.sp_icon)
+        self.sp_dist.setToolTip("Distance from the target (0, 0, 0) to the sun, meters")
+        fs.addRow("Distance", self.sp_dist)
+        self.sp_icon.setToolTip("Size of the sun icon in the viewport, meters")
+        fs.addRow("Icon", self.sp_icon)
         sl.addLayout(fs)
         b_align = QtWidgets.QPushButton("link to HDRI")
-        b_align.setToolTip("Находит самую яркую точку текущей HDRI и ставит солнце в то же "
-                           "направление с учётом Rotation.")
+        b_align.setToolTip("Finds the brightest point of the current HDRI and places the sun in the same "
+                           "direction, taking Rotation into account.")
         b_align.clicked.connect(self.align_sun)
         mark_primary(b_align)
         set_btn_icon(b_align, "link", "#1e1e1e")
@@ -4908,30 +4918,30 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.prog_find.setAlignment(QtCore.Qt.AlignCenter)
         self.prog_find.setVisible(False)
         sl.addWidget(self.prog_find)
-        self.chk_link = ToggleSwitch("Привязать азимут к HDRI")
-        self.chk_link.setToolTip("Следовать за Rotation. Пока включено, при повороте HDRI азимут солнца пересчитывается "
-                                 "так, чтобы оно оставалось на яркой точке карты.\n"
-                                 "По умолчанию выключено; включается само после кнопки «link to HDRI».")
+        self.chk_link = ToggleSwitch("Link azimuth to HDRI")
+        self.chk_link.setToolTip("Follow Rotation. While on, rotating the HDRI recalculates the sun azimuth "
+                                 "so that it stays on the bright point of the map.\n"
+                                 "Off by default; turns on by itself after the “link to HDRI” button.")
         self.chk_link.setChecked(False)                    # по умолчанию выключено; кнопка «link to HDRI» включает
         self.chk_link.toggled.connect(lambda *_: self._refresh_state())
         sl.addWidget(self.chk_link)
         root.addWidget(gs)
 
         # --- пресеты ---
-        gp = self._card("Пресеты освещения", "presets")
+        gp = self._card("Lighting presets", "presets")
         pl = QtWidgets.QVBoxLayout(gp.body)
         pl.setContentsMargins(0, 2, 0, 0)
         self.cmb_presets = QtWidgets.QComboBox()
         pl.addWidget(self.cmb_presets)
         row = QtWidgets.QHBoxLayout()
-        b_pload = QtWidgets.QPushButton("Загрузить")
+        b_pload = QtWidgets.QPushButton("Load")
         b_pload.clicked.connect(self.load_preset)
-        b_psave = QtWidgets.QPushButton("Сохранить как...")
+        b_psave = QtWidgets.QPushButton("Save as...")
         b_psave.clicked.connect(self.save_preset_as)
-        b_pupd = QtWidgets.QPushButton("Обновить")
-        b_pupd.setToolTip("Перезаписать выбранный пресет текущими параметрами")
+        b_pupd = QtWidgets.QPushButton("Update")
+        b_pupd.setToolTip("Overwrite the selected preset with the current parameters")
         b_pupd.clicked.connect(self.update_preset)
-        b_pdel = QtWidgets.QPushButton("Удалить")
+        b_pdel = QtWidgets.QPushButton("Delete")
         set_btn_icon(b_pdel, "trash")
         b_pdel.clicked.connect(self.delete_preset)
         grid = QtWidgets.QGridLayout()          # 2x2, чтобы панель оставалась узкой
@@ -4939,18 +4949,18 @@ class SafeEnvironment(QtWidgets.QWidget):
         grid.addWidget(b_psave, 0, 1)
         grid.addWidget(b_pupd, 1, 0)
         grid.addWidget(b_pdel, 1, 1)
-        b_pexp = QtWidgets.QPushButton("В файл...")
-        b_pexp.setToolTip("Сохранить пресеты в файл, чтобы перенести их в другую сцену или на другой компьютер.")
+        b_pexp = QtWidgets.QPushButton("To file...")
+        b_pexp.setToolTip("Save presets to a file to move them to another scene or computer.")
         b_pexp.clicked.connect(self.export_presets)
-        b_pimp = QtWidgets.QPushButton("Из файла...")
-        b_pimp.setToolTip("Загрузить пресеты из файла, сохранённого кнопкой «В файл...».")
+        b_pimp = QtWidgets.QPushButton("From file...")
+        b_pimp.setToolTip("Load presets from a file saved with the “To file...” button.")
         b_pimp.clicked.connect(self.import_presets)
         grid.addWidget(b_pexp, 2, 0)
         grid.addWidget(b_pimp, 2, 1)
-        b_pscene = QtWidgets.QPushButton("Сохранить рядом со сценой")
-        b_pscene.setToolTip("Без диалогов: все пресеты сохраняются в папку открытой сцены в файл\n"
-                            "«ИмяСцены.presets.json». Повторное нажатие перезаписывает этот файл.\n"
-                            "Загрузить обратно: «Из файла...».")
+        b_pscene = QtWidgets.QPushButton("Save next to scene")
+        b_pscene.setToolTip("No dialogs: all presets are saved to the folder of the open scene in the file\n"
+                            "“SceneName.presets.json”. Pressing again overwrites this file.\n"
+                            "To load back: “From file...”.")
         b_pscene.clicked.connect(self.save_presets_beside_scene)
         grid.addWidget(b_pscene, 3, 0, 1, 2)
         pl.addLayout(grid)
@@ -4966,7 +4976,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.lbl_status.setWordWrap(True)
         root.addWidget(self.lbl_status)
 
-        gc = self._card("Компас солнца", "compass")
+        gc = self._card("Sun compass", "compass")
         self._card_compass = gc
         cl = QtWidgets.QVBoxLayout(gc.body)
         cl.setContentsMargins(0, 2, 0, 0)
@@ -4976,9 +4986,9 @@ class SafeEnvironment(QtWidgets.QWidget):
         crow.addWidget(self.compass)
         crow.addStretch(1)
         cl.addLayout(crow)
-        self.chk_compass_tex = ToggleSwitch("Показывать текстуру HDRI")
+        self.chk_compass_tex = ToggleSwitch("Show HDRI texture")
         self.chk_compass_tex.setChecked(True)
-        self.chk_compass_tex.setToolTip("Выключить — шар без картинки (проще увидеть линии и солнце).")
+        self.chk_compass_tex.setToolTip("Turn off to get a plain sphere (easier to see the lines and the sun).")
         self.chk_compass_tex.toggled.connect(self.compass.set_show_tex)
         cl.addWidget(self.chk_compass_tex)
         self.compass.clicked_az.connect(self._on_compass_click)
@@ -4991,10 +5001,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addStretch(1)
 
         row_h = QtWidgets.QHBoxLayout()
-        self.b_undo = QtWidgets.QPushButton("Отменить")
+        self.b_undo = QtWidgets.QPushButton("Undo")
         set_btn_icon(self.b_undo, "undo")
         self.b_undo.clicked.connect(self.hist_undo)
-        self.b_redo = QtWidgets.QPushButton("Вернуть")
+        self.b_redo = QtWidgets.QPushButton("Redo")
         set_btn_icon(self.b_redo, "redo")
         self.b_redo.setLayoutDirection(QtCore.Qt.RightToLeft)
         self.b_redo.clicked.connect(self.hist_redo)
@@ -5003,10 +5013,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         root.addLayout(row_h)
         self._hist_buttons()
 
-        b_all = QtWidgets.QPushButton("Сбросить все значения")
+        b_all = QtWidgets.QPushButton("Reset all values")
         b_all.setMinimumHeight(30)
-        b_all.setToolTip("Удаляет солнце (с целью и значком), очищает слот Single map (Scene Environment) "
-                         "и возвращает все параметры к базовым.")
+        b_all.setToolTip("Removes the sun (with target and icon), clears the Single map slot (Scene Environment) "
+                         "and returns all parameters to defaults.")
         b_all.clicked.connect(self.reset_all)
         set_btn_icon(b_all, "reset")
         root.addWidget(b_all)
@@ -5027,7 +5037,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             bd.setMinimumHeight(28)
             bd.setProperty("primary", True)
             bd.setCursor(QtCore.Qt.PointingHandCursor)
-            bd.setToolTip("Поддержать автора через PayPal (откроется в браузере)")
+            bd.setToolTip("Support the author via PayPal (opens in the browser)")
             bd.clicked.connect(lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(DONATE_URL)))
             root.addWidget(bd)
         try:
@@ -5074,13 +5084,13 @@ class SafeEnvironment(QtWidgets.QWidget):
         except Exception:
             print("[SkyRig Studio] apply_mode error:\n" + traceback.format_exc())
 
-    @undoable("Смена HDRI")
+    @undoable("HDRI change")
     def step_hdri(self, direction):
         """Следующая / предыдущая HDRI в группе, которая выбрана в библиотеке (по кругу)."""
         group = self.lib.last_group or ALL_GROUP
         files = self.lib.files_of(group)
         if not files:
-            self._status("В группе «%s» нет файлов — выберите группу в библиотеке." % group, error=True)
+            self._status("There are no files in group “%s”: select a group in the library." % group, error=True)
             return
         cur = path_key(self._current_path()) if self._current_path() else None
         keys = [path_key(p) for p in files]
@@ -5093,9 +5103,9 @@ class SafeEnvironment(QtWidgets.QWidget):
             i = (i + direction) % n
             if os.path.isfile(files[i]):
                 if self.apply_path(files[i]):
-                    self._status("%s  [%d/%d, группа «%s»]" % (os.path.basename(files[i]), i + 1, n, group))
+                    self._status("%s  [%d/%d, group “%s”]" % (os.path.basename(files[i]), i + 1, n, group))
                 return
-        self._status("В группе «%s» нет доступных файлов." % group, error=True)
+        self._status("There are no available files in group “%s”." % group, error=True)
 
     # ---------- собственная история изменений (не связана с Ctrl+Z в 3ds Max) ----------
     def _scene_state(self):
@@ -5135,14 +5145,14 @@ class SafeEnvironment(QtWidgets.QWidget):
                 self._hist, self._hist_labels, self._hist_idx = [], [], -1
             cur = self._scene_state()
             if not self._hist:
-                self._hist, self._hist_labels, self._hist_idx = [cur], ["начало"], 0
+                self._hist, self._hist_labels, self._hist_idx = [cur], ["start"], 0
                 self._hist_scene = sid
             elif not _state_equal(cur, self._hist[self._hist_idx]):
                 # изменено вне скрипта: фиксируем как отдельный шаг, чтобы «Отменить» вернуло именно к нему
                 del self._hist[self._hist_idx + 1:]
                 del self._hist_labels[self._hist_idx + 1:]
                 self._hist.append(cur)
-                self._hist_labels.append("изменено вне скрипта")
+                self._hist_labels.append("changed outside the script")
                 self._hist_idx += 1
                 self._hist_key = None
         self._hist_depth += 1
@@ -5181,10 +5191,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         can_r = 0 <= self._hist_idx < len(self._hist) - 1
         self.b_undo.setEnabled(can_u)
         self.b_redo.setEnabled(can_r)
-        self.b_undo.setToolTip("Отменить: %s" % self._hist_labels[self._hist_idx] if can_u
-                               else "Нечего отменять. Это история только этого скрипта, Ctrl+Z в 3ds Max не затрагивается.")
-        self.b_redo.setToolTip("Вернуть: %s" % self._hist_labels[self._hist_idx + 1] if can_r
-                               else "Нечего возвращать.")
+        self.b_undo.setToolTip("Undo: %s" % self._hist_labels[self._hist_idx] if can_u
+                               else "Nothing to undo. This is the history of this script only; Ctrl+Z in 3ds Max is not affected.")
+        self.b_redo.setToolTip("Redo: %s" % self._hist_labels[self._hist_idx + 1] if can_r
+                               else "Nothing to redo.")
 
     def _hist_goto(self, new_idx, verb):
         if self._busy:
@@ -5192,11 +5202,11 @@ class SafeEnvironment(QtWidgets.QWidget):
         if self._hist and self._scene_id() != self._hist_scene:
             self._hist, self._hist_labels, self._hist_idx = [], [], -1
             self._hist_buttons()
-            self._status("Открыта другая сцена — история скрипта сброшена.")
+            self._status("Another scene was opened: the script history was reset.")
             return
         if not (0 <= new_idx < len(self._hist)):
             return
-        label = self._hist_labels[self._hist_idx if verb == "Отменено" else new_idx]
+        label = self._hist_labels[self._hist_idx if verb == "Undone" else new_idx]
         self._restoring = True
         try:
             ok = self._restore_state(self._hist[new_idx])
@@ -5206,14 +5216,14 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._hist_key = None
         self.sync_from_scene()
         self._hist_buttons()
-        self._status("%s: %s" % (verb, label) if ok else "Состояние восстановлено не полностью (см. Listener).",
+        self._status("%s: %s" % (verb, label) if ok else "The state was not fully restored (see Listener).",
                      error=not ok)
 
     def hist_undo(self):
-        self._hist_goto(self._hist_idx - 1, "Отменено")
+        self._hist_goto(self._hist_idx - 1, "Undone")
 
     def hist_redo(self):
-        self._hist_goto(self._hist_idx + 1, "Возвращено")
+        self._hist_goto(self._hist_idx + 1, "Redone")
 
     def _set_hdri_file(self, path):
         """Кладёт HDRI в Single map без вопросов и без привязки солнца (для восстановления состояния)."""
@@ -5273,14 +5283,14 @@ class SafeEnvironment(QtWidgets.QWidget):
     def start_interactive(self):
         """Запуск Corona Interactive Rendering (то же, что кнопка Interactive в Corona)."""
         if corona_renderer() is None:
-            self._status("Текущий рендерер не Corona — интерактивный рендер недоступен.", error=True)
+            self._status("Current renderer is not Corona: interactive rendering is unavailable.", error=True)
             return
         try:
             alog("ACTION Start Interactive Render")
             rt.CoronaRenderer.CoronaFp.startInteractive()
-            self._status("Запущен интерактивный рендер Corona.")
+            self._status("Corona Interactive Rendering started.")
         except Exception as ex:
-            self._status("Не удалось запустить интерактивный рендер: %s" % ex, error=True)
+            self._status("Could not start interactive rendering: %s" % ex, error=True)
 
     # ---------- превью / библиотека ----------
     def _current_path(self):
@@ -5305,7 +5315,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         else:
             self._preview_base = None
             self.lbl_preview.setPixmap(QtGui.QPixmap())
-            self.lbl_preview.setText("Нет превью" if path else "Нет HDRI\n(клик — открыть библиотеку)")
+            self.lbl_preview.setText("No preview" if path else "No HDRI\n(click to open the library)")
         self._draw_preview()
 
     def _draw_preview(self):
@@ -5344,25 +5354,25 @@ class SafeEnvironment(QtWidgets.QWidget):
         self.sync_from_scene()
 
     # ---------- применение HDRI ----------
-    @undoable("Применить HDRI")
+    @undoable("Apply HDRI")
     def apply_path(self, path, auto_exposure=True):
         """Ставит HDRI в Scene Environment -> Single map (Corona). Вызывается и окном библиотеки.
         auto_exposure: при смене карты Exposure сбрасывается на 0 (если включено выравнивание яркости —
         ставится по поправке карты). Повторное применение той же карты Exposure не трогает."""
         alog("  apply_path %s" % path)
         if not os.path.isfile(path):
-            self._status("Файл не найден: %s" % path, error=True)
+            self._status("File not found: %s" % path, error=True)
             return False
         if corona_renderer() is None:
-            self._status("Текущий рендерер не Corona — слот Single map недоступен.", error=True)
+            self._status("Current renderer is not Corona: the Single map slot is unavailable.", error=True)
             return False
         cc, bm, other = get_chain()
         if other:
             Msg = QtWidgets.QMessageBox
             r = Msg.question(
                 self, WINDOW_TITLE,
-                "В слоте Single map (Scene Environment) уже лежит другая карта.\n"
-                "Заменить её на HDRI?\n\nМожно отменить через Ctrl+Z.",
+                "The Single map slot (Scene Environment) already holds a different map.\n"
+                "Replace it with the HDRI?\n\nYou can undo with Ctrl+Z.",
                 Msg.Yes | Msg.No, Msg.No)
             if r != Msg.Yes:
                 return False
@@ -5394,9 +5404,9 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._set_exposure(0.0)                      # другая карта — Exposure с нуля, поправка яркости применяется сама
             note = " Exposure 0.00 EV"
             if abs(corr) >= 0.005:
-                note += ", выравнивание яркости %+.2f EV применено" % corr
+                note += ", brightness balancing %+.2f EV applied" % corr
             note += "."
-        self._status("Применён: %s.%s" % (os.path.basename(path), note))
+        self._status("Applied: %s.%s" % (os.path.basename(path), note))
         return True
 
     def _set_exposure(self, ev):
@@ -5406,16 +5416,16 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._on_hdri_setting()
         self._update_current_label(self._current_path())
 
-    @undoable("Выравнивание яркости")
+    @undoable("Brightness balancing")
     def apply_norm_to_current(self):
         """Включено выравнивание: поправка карты применяется под капотом, Exposure пользователя — 0."""
         path = self._current_path()
         off = self.lib.norm_offset(path) if path else None
         if off is None:
-            self._status("Для текущей карты нет измерения яркости.")
+            self._status("There is no brightness measurement for the current map.")
             return
         self._set_exposure(0.0)
-        self._status("Выравнивание яркости %+.2f EV применено (Exposure 0.00)." % off)
+        self._status("Brightness balancing %+.2f EV applied (Exposure 0.00)." % off)
 
     def refresh_norm_current(self):
         """Эталон/режим изменились — пересчитать поправку текущей карты, Exposure пользователя не трогаем."""
@@ -5423,7 +5433,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._on_hdri_setting()
             self._update_current_label(self._current_path())
 
-    @undoable("Сброс выравнивания яркости")
+    @undoable("Brightness balancing reset")
     def reset_norm_current(self):
         if self._current_path():
             self._set_exposure(0.0)
@@ -5438,7 +5448,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             bm.filename = p
             return p
         p = self._run("reload HDR", do)
-        self._status("Перезагружен: %s" % os.path.basename(p) if p else "Нет HDRI для перезагрузки.")
+        self._status("Reloaded: %s" % os.path.basename(p) if p else "No HDRI to reload.")
 
     # ---------- настройки HDRI ----------
     def _hdri_values(self):
@@ -5487,7 +5497,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             name = str(c.name) if c is not None else ""
         except Exception:
             name = ""
-        txt = name or "Активная CoronaCam"
+        txt = name or "Active CoronaCam"
         i = self.cmb_target.findData(TARGET_CAMERA)
         if i >= 0 and self.cmb_target.itemText(i) != txt:
             self.cmb_target.setItemText(i, txt)
@@ -5517,7 +5527,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._loading = False
         self._on_hdri_setting()
 
-    @undoable("Настройки HDRI")
+    @undoable("HDRI settings")
     def _on_hdri_setting(self, *_):
         if self._loading:
             return
@@ -5527,7 +5537,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         self._no_cam = False
         res = self._run("HDRI settings", lambda: self._write_hdri(**vals))
         if res is False:
-            self._status("Сначала примените HDRI (клик по превью).")
+            self._status("Apply the HDRI first (click a preview).")
             return
         # привязка: после поворота HDRI солнце остаётся на яркой точке карты;
         # при сдвиге горизонта меняется и высота
@@ -5536,32 +5546,32 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._align_impl(create_if_missing=False, quiet=True, azimuth_only=not moved)
         self._last_horizon = vals["horizon"]
         if self._no_cam:
-            self._status("Активный вид — не CoronaCam: Direct/Reflect/Refract EV для камеры не записаны.", error=True)
+            self._status("The active view is not a CoronaCam: Direct/Reflect/Refract EV were not written for the camera.", error=True)
             return
         if self._skipped_channels:
-            self._status("В каналах %s уже лежит чужая карта — не тронута." % ", ".join(self._skipped_channels), error=True)
+            self._status("The %s channels already hold someone else's map: left untouched." % ", ".join(self._skipped_channels), error=True)
             return
         self._refresh_state()
 
-    @undoable("Сброс настроек HDRI")
+    @undoable("HDRI settings reset")
     def reset_hdri_settings(self):
         vals = dict(rotation=0.0, exposure=0.0, gamma=1.0, saturation=100.0, blur=BLUR_DEFAULT,
                     horizon=0.0, cam_ev=0.0, refl_ev=0.0, refr_ev=0.0)
         if self._run("reset HDRI", lambda: self._write_hdri(**vals)) is False:
-            self._status("Сначала примените HDRI.")
+            self._status("Apply the HDRI first.")
             return
         self.sync_from_scene()
         if self.chk_link.isChecked() and find_sun() is not None:
             self._align_impl(create_if_missing=False, quiet=True, azimuth_only=True)
 
-    @undoable("Сброс всех значений")
+    @undoable("Reset all")
     def reset_all(self):
         sun = find_sun()
-        sun_txt = "солнце «%s» (вместе с целью и значком)" % str(sun.name) if sun is not None else "солнца в сцене нет"
+        sun_txt = "sun “%s” (with target and icon)" % str(sun.name) if sun is not None else "no sun in the scene"
         r = QtWidgets.QMessageBox.question(
-            self, "Сбросить все значения",
-            "Будет выполнено:\n• удалить %s;\n• очистить слот Single map (Scene Environment, Corona);\n"
-            "• вернуть все параметры к базовым.\n\nПродолжить? (Отмена — Ctrl+Z.)" % sun_txt)
+            self, "Reset all values",
+            "This will:\n• remove %s;\n• clear the Single map slot (Scene Environment, Corona);\n"
+            "• return all parameters to defaults.\n\nContinue? (Cancel: Ctrl+Z.)" % sun_txt)
         if r != QtWidgets.QMessageBox.Yes:
             return
 
@@ -5590,7 +5600,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                     r.bg_texmap = None
                     r.bg_source = 0           # снова «3ds Max settings (Environment tab)»
                 else:
-                    note.append("чужая карта в Single map не тронута")
+                    note.append("someone else's map in Single map left untouched")
             if _our_chain(rt.environmentMap) is not None:
                 rt.environmentMap = None
             return note
@@ -5623,13 +5633,13 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._loading = False
         self._active_preset = None
         self.sync_from_scene()
-        self._status("Сброшено: солнце удалено, слот Single map очищен, значения базовые.%s" % reset_note)
+        self._status("Reset: sun removed, Single map slot cleared, default values.%s" % reset_note)
 
     # ---------- солнце ----------
-    @undoable("Создание солнца")
+    @undoable("Sun creation")
     def create_sun(self):
         if find_sun() is not None:
-            self._status("Солнце уже есть в сцене — второе не создаю.")
+            self._status("There is already a sun in the scene; not creating a second one.")
             return
 
         def do():
@@ -5641,7 +5651,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             return True
 
         if self._run("create sun", do):
-            self._status("Солнце создано: цель (Target) в центре сцены (0, 0, 0).")
+            self._status("Sun created: the target is at the scene center (0, 0, 0).")
             self.sync_from_scene()
             if self.chk_link.isChecked() and self._current_path():
                 self._align_impl(create_if_missing=False, quiet=True)   # сразу на яркую точку HDRI
@@ -5649,7 +5659,7 @@ class SafeEnvironment(QtWidgets.QWidget):
     def select_sun(self):
         s = find_sun()
         if s is None:
-            self._status("Солнце не найдено.")
+            self._status("Sun not found.")
             return
         self._run("select sun", lambda: rt.select(s))
 
@@ -5661,17 +5671,17 @@ class SafeEnvironment(QtWidgets.QWidget):
             self.chk_link.setChecked(False)
         self._on_sun_setting()
 
-    @undoable("Компас: азимут солнца")
+    @undoable("Compass: sun azimuth")
     def _on_compass_click(self, az):
         """Клик по компасу: солнце — на выбранный азимут (высота прежняя), HDRI поворачивается так,
         чтобы её самый яркий пиксель остался под солнцем."""
         s = find_sun()
         path = self._current_path()
         if s is None:
-            self._status("Сначала создайте солнце.", error=True)
+            self._status("Create the sun first.", error=True)
             return
         if not path or not os.path.isfile(path):
-            self._status("Сначала примените HDRI с существующим файлом.", error=True)
+            self._status("Apply an HDRI with an existing file first.", error=True)
             return
         try:
             pt = self._hdri_sun_point(path)
@@ -5679,7 +5689,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             print("[SkyRig Studio] compass click error:\n" + traceback.format_exc())
             pt = None
         if pt is None:
-            self._status("Не удалось найти яркую точку HDRI.", error=True)
+            self._status("Could not find the bright point of the HDRI.", error=True)
             return
         u = pt[0]
         z = s.transform.row3
@@ -5699,9 +5709,9 @@ class SafeEnvironment(QtWidgets.QWidget):
             self.sp_azim.setValue(az)
             self._loading = False
         self._refresh_state()
-        self._status("Солнце: азимут %.1f° (высота %.1f° без изменений), Rotation HDRI %.2f°." % (az, cur_el, new_rot))
+        self._status("Sun: azimuth %.1f° (elevation %.1f° unchanged), HDRI Rotation %.2f°." % (az, cur_el, new_rot))
 
-    @undoable("Настройки солнца")
+    @undoable("Sun settings")
     def _on_sun_setting(self, *_):
         if self._loading:
             return
@@ -5722,7 +5732,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             return True
 
         if self._run("sun settings", do) is False:
-            self._status("Солнце не найдено — нажмите «Создать в центре».")
+            self._status("Sun not found: press “Create at center”.")
         self._refresh_state()
 
     # ---------- совмещение солнца с HDRI ----------
@@ -5739,7 +5749,7 @@ class SafeEnvironment(QtWidgets.QWidget):
             return c["u"], c["v"], c["peak"]
         self._wait_cursor(True)
         self.prog_find.setValue(0)
-        self.prog_find.setFormat("Подготовка...")
+        self.prog_find.setFormat("Preparing...")
         self.prog_find.setVisible(True)
         QtWidgets.QApplication.processEvents()
         try:
@@ -5758,21 +5768,21 @@ class SafeEnvironment(QtWidgets.QWidget):
         if self._align_impl(create_if_missing=True, quiet=False, force_search=True):
             self.chk_link.setChecked(True)
 
-    @undoable("Привязка солнца к HDRI")
+    @undoable("Link sun to HDRI")
     def _align_impl(self, create_if_missing, quiet, azimuth_only=False, force_search=False):
         path = self._current_path()
         if not path or not os.path.isfile(path):
             if not quiet:
-                self._status("Сначала примените HDRI с существующим файлом.", error=True)
+                self._status("Apply an HDRI with an existing file first.", error=True)
             return
         try:
             pt = self._hdri_sun_point(path, force=force_search)
         except Exception:
             print("[SkyRig Studio] find brightest error:\n" + traceback.format_exc())
-            self._status("Не удалось найти яркую точку (см. Listener).", error=True)
+            self._status("Could not find the bright point (see Listener).", error=True)
             return
         if pt is None:
-            self._status("Не удалось прочитать HDRI.", error=True)
+            self._status("Could not read the HDRI.", error=True)
             return
         u, v, peak = pt
         _cc, bm, _o = get_chain()
@@ -5780,10 +5790,10 @@ class SafeEnvironment(QtWidgets.QWidget):
         az, el = hdri_pixel_to_direction(u, v, rot, bm_horizon(bm) if bm is not None else 0.0)
         warn = ""
         if el < 0:
-            warn = " Яркая точка ниже горизонта — высота ограничена 0°."
+            warn = " The bright point is below the horizon: elevation limited to 0°."
         el_c = max(0.0, min(90.0, el))
         if peak < SUN_MIN_PEAK:
-            warn += " Яркость пика невелика (%.1f) — похоже, чёткого солнца на карте нет." % peak
+            warn += " The peak brightness is low (%.1f): there seems to be no distinct sun on the map." % peak
 
         if find_sun() is None:
             if not create_if_missing:
@@ -5812,8 +5822,8 @@ class SafeEnvironment(QtWidgets.QWidget):
             self._loading = False
             self._refresh_state()                 # красная надпись / крестик — в том числе после тихого выравнивания
             if not quiet:
-                self._status("Солнце совмещено с HDRI: Azimuth %.2f°, Height %.2f° "
-                             "(пик %.0f, точка u=%.4f v=%.4f).%s" % (az, el_c, peak, u, v, warn))
+                self._status("Sun aligned with the HDRI: Azimuth %.2f°, Height %.2f° "
+                             "(peak %.0f, point u=%.4f v=%.4f).%s" % (az, el_c, peak, u, v, warn))
             return True
 
     # ---------- пресеты ----------
@@ -5843,20 +5853,20 @@ class SafeEnvironment(QtWidgets.QWidget):
             self.presets.save()
         except Exception:
             print("[SkyRig Studio] preset save error:\n" + traceback.format_exc())
-            self._status("Не удалось сохранить пресеты (см. Listener).", error=True)
+            self._status("Could not save presets (see Listener).", error=True)
             return False
         return True
 
     def save_preset_as(self):
         cam = active_camera_name()
         dlg = QtWidgets.QInputDialog(self)
-        dlg.setWindowTitle("Сохранить пресет")
+        dlg.setWindowTitle("Save preset")
         dlg.setInputMode(QtWidgets.QInputDialog.TextInput)
         if cam:
-            dlg.setLabelText("Название пресета (подставлена активная камера — допишите вариант):")
+            dlg.setLabelText("Preset name (the active camera is filled in: add a variant):")
             dlg.setTextValue(cam + " ")
         else:
-            dlg.setLabelText("Название пресета:")
+            dlg.setLabelText("Preset name:")
         le = dlg.findChild(QtWidgets.QLineEdit)
 
         def _cursor_to_end():                          # по умолчанию текст выделен и затрётся первым символом
@@ -5870,37 +5880,37 @@ class SafeEnvironment(QtWidgets.QWidget):
         if not name:
             return
         if name in self.presets.presets:
-            r = QtWidgets.QMessageBox.question(self, "Пресет существует",
-                                               "Пресет «%s» уже есть. Перезаписать?" % name)
+            r = QtWidgets.QMessageBox.question(self, "Preset exists",
+                                               "Preset “%s” already exists. Overwrite?" % name)
             if r != QtWidgets.QMessageBox.Yes:
                 return
         if self._store_preset(name):
             self._active_preset = name
             self._refresh_presets(select=name)
-            self._status("Пресет «%s» сохранён." % name)
+            self._status("Preset “%s” saved." % name)
 
     def update_preset(self):
         name = self.cmb_presets.currentText()
         if not name:
-            self._status("Выберите пресет.")
+            self._status("Select a preset.")
             return
         if self._store_preset(name):
             self._active_preset = name
-            self._status("Пресет «%s» обновлён." % name)
+            self._status("Preset “%s” updated." % name)
 
     def export_presets(self):
         if not self.presets.presets:
-            self._status("Пресетов нет — сохранять нечего.", error=True)
+            self._status("No presets: nothing to save.", error=True)
             return
         names = None
         cur = self.cmb_presets.currentText()
         if cur and len(self.presets.presets) > 1:
             box = QtWidgets.QMessageBox(self)
-            box.setWindowTitle("Пресеты в файл")
-            box.setText("Что сохранить?")
-            b_one = box.addButton("Только «%s»" % cur, QtWidgets.QMessageBox.AcceptRole)
-            b_all = box.addButton("Все (%d)" % len(self.presets.presets), QtWidgets.QMessageBox.AcceptRole)
-            box.addButton("Отмена", QtWidgets.QMessageBox.RejectRole)
+            box.setWindowTitle("Presets to file")
+            box.setText("What to save?")
+            b_one = box.addButton("Only “%s”" % cur, QtWidgets.QMessageBox.AcceptRole)
+            b_all = box.addButton("All (%d)" % len(self.presets.presets), QtWidgets.QMessageBox.AcceptRole)
+            box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
             box.exec()
             c = box.clickedButton()
             if c is b_one:
@@ -5909,7 +5919,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 return
         default = os.path.join(os.path.expanduser("~"), "SkyRigStudio_presets.json")
         path, _f = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Сохранить пресеты", default, "Пресеты SkyRig Studio (*.json)")
+            self, "Save presets", default, "SkyRig Studio presets (*.json)")
         if not path:
             return
         if not path.lower().endswith(".json"):
@@ -5918,19 +5928,19 @@ class SafeEnvironment(QtWidgets.QWidget):
             n = self.presets.export_to(path, names)
         except Exception:
             print("[SkyRig Studio] presets export error:\n" + traceback.format_exc())
-            self._status("Не удалось сохранить файл (см. Listener).", error=True)
+            self._status("Could not save the file (see Listener).", error=True)
             return
-        self._status("Пресетов сохранено: %d. %s" % (n, path))
+        self._status("Presets saved: %d. %s" % (n, path))
 
     def _ask_overwrite(self, path):
         """Файл уже есть: 'yes' — перезаписать, 'rename' — другое имя, 'no' — отмена."""
         box = QtWidgets.QMessageBox(self)
         box.setIcon(QtWidgets.QMessageBox.Warning)
-        box.setWindowTitle("Файл уже существует")
-        box.setText("Файл уже существует и будет перезаписан:\n%s\n\nПерезаписать?" % path)
-        b_yes = box.addButton("Да, перезаписать", QtWidgets.QMessageBox.YesRole)
-        b_ren = box.addButton("Сохранить с другим именем...", QtWidgets.QMessageBox.ActionRole)
-        b_no = box.addButton("Нет", QtWidgets.QMessageBox.NoRole)
+        box.setWindowTitle("File already exists")
+        box.setText("The file already exists and will be overwritten:\n%s\n\nOverwrite?" % path)
+        b_yes = box.addButton("Yes, overwrite", QtWidgets.QMessageBox.YesRole)
+        b_ren = box.addButton("Save with another name...", QtWidgets.QMessageBox.ActionRole)
+        b_no = box.addButton("No", QtWidgets.QMessageBox.NoRole)
         box.setDefaultButton(b_no)
         box.setEscapeButton(b_no)
         self._ask_box = box                      # для тестов: на него можно посмотреть без exec
@@ -5947,7 +5957,7 @@ class SafeEnvironment(QtWidgets.QWidget):
     def _ask_new_name(self, folder, base):
         """Предлагает свободное имя (ИмяСцены_2). Возвращает имя файла с расширением или None."""
         text, ok = QtWidgets.QInputDialog.getText(
-            self, "Новое имя файла", "Имя файла пресетов (расширение .presets.json добавится само):",
+            self, "New file name", "Presets file name (the .presets.json extension is added automatically):",
             QtWidgets.QLineEdit.Normal, self._suggest_free_name(folder, base))
         if not ok:
             return None
@@ -5961,14 +5971,14 @@ class SafeEnvironment(QtWidgets.QWidget):
     def save_presets_beside_scene(self):
         """Все пресеты — в файл «<имя сцены>.presets.json» в папке открытой сцены, без диалогов."""
         if not self.presets.presets:
-            self._status("Пресетов нет — сохранять нечего.", error=True)
+            self._status("No presets: nothing to save.", error=True)
             return
         try:
             folder, fname = str(rt.maxFilePath), str(rt.maxFileName)
         except Exception:
             folder, fname = "", ""
         if not folder or not fname:
-            self._status("Сцена ещё не сохранена — сохраните её, и у файла появится имя и папка.", error=True)
+            self._status("The scene is not saved yet: save it and the file will get a name and a folder.", error=True)
             return
         base = os.path.splitext(fname)[0]
         path = os.path.join(folder, base + ".presets.json")
@@ -5977,45 +5987,45 @@ class SafeEnvironment(QtWidgets.QWidget):
             if ans == "yes":
                 break
             if ans != "rename":
-                self._status("Сохранение отменено, файл не тронут.")
+                self._status("Saving cancelled, the file was not touched.")
                 return
             new = self._ask_new_name(folder, base)
             if not new:
-                self._status("Сохранение отменено, файл не тронут.")
+                self._status("Saving cancelled, the file was not touched.")
                 return
             path = os.path.join(folder, new)         # если и такой есть — спросим снова
         try:
             n = self.presets.export_to(path)
         except Exception:
             print("[SkyRig Studio] presets beside scene error:\n" + traceback.format_exc())
-            self._status("Не удалось записать файл в папку сцены (нет прав или сеть недоступна).", error=True)
+            self._status("Could not write the file to the scene folder (no permission or the network is unavailable).", error=True)
             return
-        self._status("Пресетов сохранено: %d. Файл: %s" % (n, path))
+        self._status("Presets saved: %d. File: %s" % (n, path))
 
     def import_presets(self):
         path, _f = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Загрузить пресеты", os.path.expanduser("~"), "Пресеты SkyRig Studio (*.json)")
+            self, "Load presets", os.path.expanduser("~"), "SkyRig Studio presets (*.json)")
         if not path:
             return
         try:
             incoming = PresetStore.read_backup(path)
         except ValueError as ex:
-            self._status("Не загружено: %s." % ex, error=True)
+            self._status("Not loaded: %s." % ex, error=True)
             return
         if not incoming:
-            self._status("В файле нет пресетов.", error=True)
+            self._status("The file contains no presets.", error=True)
             return
         mode = "rename"
         clash = [n for n in incoming if n in self.presets.presets]
         if clash:
             box = QtWidgets.QMessageBox(self)
-            box.setWindowTitle("Пресеты из файла")
-            box.setText("В файле пресетов: %d. Совпадают по названию с имеющимися: %d (%s).\n\nЧто с ними сделать?"
+            box.setWindowTitle("Presets from file")
+            box.setText("Presets in the file: %d. Same names as existing ones: %d (%s).\n\nWhat should be done with them?"
                         % (len(incoming), len(clash), ", ".join(clash[:5]) + ("…" if len(clash) > 5 else "")))
-            b_rep = box.addButton("Заменить", QtWidgets.QMessageBox.DestructiveRole)
-            b_ren = box.addButton("Добавить с номером", QtWidgets.QMessageBox.AcceptRole)
-            b_skip = box.addButton("Пропустить", QtWidgets.QMessageBox.AcceptRole)
-            box.addButton("Отмена", QtWidgets.QMessageBox.RejectRole)
+            b_rep = box.addButton("Replace", QtWidgets.QMessageBox.DestructiveRole)
+            b_ren = box.addButton("Add with a number", QtWidgets.QMessageBox.AcceptRole)
+            b_skip = box.addButton("Skip", QtWidgets.QMessageBox.AcceptRole)
+            box.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
             box.exec()
             c = box.clickedButton()
             if c is b_rep:
@@ -6031,21 +6041,21 @@ class SafeEnvironment(QtWidgets.QWidget):
             self.presets.save()
         except Exception:
             print("[SkyRig Studio] preset save error:\n" + traceback.format_exc())
-            self._status("Не удалось сохранить пресеты (см. Listener).", error=True)
+            self._status("Could not save presets (see Listener).", error=True)
             return
         self._refresh_presets(select=self.cmb_presets.currentText() or None)
-        parts = ["добавлено %d" % added]
+        parts = ["added %d" % added]
         if replaced:
-            parts.append("заменено %d" % replaced)
+            parts.append("replaced %d" % replaced)
         if skipped:
-            parts.append("пропущено %d" % skipped)
-        self._status("Пресеты из файла: " + ", ".join(parts) + ".")
+            parts.append("skipped %d" % skipped)
+        self._status("Presets from file: " + ", ".join(parts) + ".")
 
     def delete_preset(self):
         name = self.cmb_presets.currentText()
         if not name:
             return
-        r = QtWidgets.QMessageBox.question(self, "Удалить пресет", "Удалить пресет «%s»?" % name)
+        r = QtWidgets.QMessageBox.question(self, "Delete preset", "Delete preset “%s”?" % name)
         if r == QtWidgets.QMessageBox.Yes:
             self.presets.presets.pop(name, None)
             try:
@@ -6055,14 +6065,14 @@ class SafeEnvironment(QtWidgets.QWidget):
             if self._active_preset == name:
                 self._active_preset = None
             self._refresh_presets()
-            self._status("Пресет «%s» удалён." % name)
+            self._status("Preset “%s” deleted." % name)
 
-    @undoable("Загрузка пресета")
+    @undoable("Loading preset")
     def load_preset(self):
         name = self.cmb_presets.currentText()
         p = self.presets.presets.get(name) if name else None
         if not p:
-            self._status("Выберите пресет.")
+            self._status("Select a preset.")
             return
         notes = []
         path = p.get("hdri", "")
@@ -6071,7 +6081,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                 if not self.apply_path(path, auto_exposure=False):
                     return
             else:
-                notes.append("файл HDRI не найден: %s" % path)
+                notes.append("HDRI file not found: %s" % path)
         sat = float(p.get("saturation", 100.0 if p.get("fmt", 1) >= 2 else 0.0))
         if p.get("fmt", 1) < 2:
             sat += 100.0                  # пресет старого формата: 0 = норма
@@ -6080,7 +6090,7 @@ class SafeEnvironment(QtWidgets.QWidget):
                     horizon=p.get("horizon", 0.0), cam_ev=p.get("cam_ev", 0.0),
                     refl_ev=p.get("refl_ev", 0.0), refr_ev=p.get("refr_ev", 0.0))
         if self._run("preset HDRI", lambda: self._write_hdri(**vals)) is False:
-            notes.append("HDRI-настройки не применены (нет HDRI)")
+            notes.append("HDRI settings not applied (no HDRI)")
         sun = p.get("sun")
         if sun:
             if find_sun() is None:
@@ -6109,7 +6119,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         if self.chk_link.isChecked() and find_sun() is not None:
             self._align_impl(create_if_missing=False, quiet=True, azimuth_only=True)
         self._active_preset = name
-        self._status("Пресет «%s» загружен.%s" % (name, (" " + "; ".join(notes)) if notes else ""))
+        self._status("Preset “%s” loaded.%s" % (name, (" " + "; ".join(notes)) if notes else ""))
 
     # ---------- название карты и яркостный диапазон ----------
     def _update_current_label(self, path):
@@ -6123,7 +6133,7 @@ class SafeEnvironment(QtWidgets.QWidget):
         text, tip = name, path
         if rl:
             sz = image_size(path)
-            tip += "\n\nРазрешение текстуры: %d x %d px" % sz
+            tip += "\n\nTexture resolution: %d x %d px" % sz
         try:
             if path and os.path.isfile(lin_path(path)):
                 key = (path, os.path.getmtime(lin_path(path)))
@@ -6136,21 +6146,21 @@ class SafeEnvironment(QtWidgets.QWidget):
                     peak = st[0] if approx else float(cached["peak"])
                     ev = range_ev(max(peak, st[0]), st[1])
                     if ev is not None:
-                        text = "%s\nДиапазон: %s%.1f EV" % (name, "≈" if approx else "", ev)
+                        text = "%s\nRange: %s%.1f EV" % (name, "≈" if approx else "", ev)
                         corr = self._corr_text(path)
                         if corr:
                             text += " " + corr
-                        tip = tip + "\n\nДинамический диапазон: от тёмного края (0.5 % самых тёмных пикселей) " \
-                                     "до самого яркого пикселя.\n" + (
-                            "«≈» — пик взят из превью и занижен; точнее после поиска яркой точки."
-                            if approx else "Пик измерен по полному разрешению.")
+                        tip = tip + "\n\nDynamic range: from the dark edge (the darkest 0.5 % of pixels) " \
+                                     "to the brightest pixel.\n" + (
+                            "“≈”: the peak was taken from the preview and is underestimated; more accurate after the bright-point search."
+                            if approx else "The peak was measured at full resolution.")
         except Exception:
             pass
         corr = self._corr_text(path) if path else ""
         if corr and "[" not in text:                    # диапазона нет (нет превью) — поправка всё равно видна
             text += "\n" + corr
         if corr:
-            tip += "\n\nПоправка выравнивания яркости (из библиотеки): экспозиция, при которой карта даёт столько же света, сколько эталон."
+            tip += "\n\nBrightness balancing correction (from the library): the exposure at which the map gives as much light as the reference."
         self.lbl_current.setText(text)
         self.lbl_current.setToolTip(tip)
 
@@ -6194,15 +6204,15 @@ class SafeEnvironment(QtWidgets.QWidget):
                     self.sp_gamma.setValue(g_)
                     self.sp_sat.setValue(min(200.0, sat_))
             elif other:
-                self.lbl_current.setText("В слоте Single map другая карта")
+                self.lbl_current.setText("A different map is in the Single map slot")
             else:
                 self.lbl_current.setText("—")
 
             s = find_sun()
             if s is None:
-                self.lbl_sun.setText("Солнце: не найдено")
+                self.lbl_sun.setText("Sun: not found")
             else:
-                self.lbl_sun.setText("Солнце: %s" % str(s.name))
+                self.lbl_sun.setText("Sun: %s" % str(s.name))
                 z = s.transform.row3
                 elev, azim = angles_from_z((float(z.x), float(z.y), float(z.z)))
                 self.sp_elev.setValue(elev)
@@ -6280,8 +6290,8 @@ def _cleanup_old(main_win):
 
 def _alog_session():
     try:
-        alog("=== SESSION v%s | сцена: %s | рендерер: %s" % (
-            VERSION, str(rt.maxFileName) or "(без имени)", _class_name(rt.renderers.current)))
+        alog("=== SESSION v%s | scene: %s | renderer: %s" % (
+            VERSION, str(rt.maxFileName) or "(untitled)", _class_name(rt.renderers.current)))
     except Exception:
         alog("=== SESSION v%s" % VERSION)
 
@@ -6294,7 +6304,7 @@ def show():
     _alog_session()
     win = SafeEnvironment()
     if _UPDATED_FROM:
-        win._status("Обновлено: v%s → v%s." % (_UPDATED_FROM, VERSION))
+        win._status("Updated: v%s → v%s." % (_UPDATED_FROM, VERSION))
     else:
         try:
             win.auto_check_updates()
